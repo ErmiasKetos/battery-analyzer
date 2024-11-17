@@ -6,18 +6,15 @@ import matplotlib.pyplot as plt
 def voltage_profiles(df):
     st.subheader("Voltage Profiles")
     
-    required_columns = ['Capacity', 'Voltage']
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    
-    if missing_columns:
-        st.warning(f"Missing columns: {', '.join(missing_columns)}. Cannot plot Voltage Profiles.")
-        return
-    
-    fig, ax = plt.subplots()
-    ax.plot(df['Capacity'], df['Voltage'])
-    ax.set_xlabel('Capacity')
-    ax.set_ylabel('Voltage')
-    st.pyplot(fig)
+    if 'Discharge Capacity (mAh)' in df.columns and 'Voltage (V)' in df.columns:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(df['Discharge Capacity (mAh)'], df['Voltage (V)'])
+        ax.set_xlabel('Discharge Capacity (mAh)')
+        ax.set_ylabel('Voltage (V)')
+        ax.set_title('Voltage vs Discharge Capacity')
+        st.pyplot(fig)
+    else:
+        st.warning("Unable to plot Voltage Profiles. Make sure 'Discharge Capacity (mAh)' and 'Voltage (V)' columns are properly mapped.")
 
 def polarization_analysis(df):
     st.subheader("Polarization Analysis")
