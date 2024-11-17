@@ -63,7 +63,6 @@ if uploaded_file:
         else:
             if analysis_type == "Data Processing and Basic Analysis":
                 st.session_state.df = data_processing_main(st.session_state.df)
-            
         elif analysis_type == "Advanced Analysis": 
             advanced_analysis_main(st.session_state.df)
                 
