@@ -9,8 +9,15 @@ from sklearn.preprocessing import StandardScaler
 def predict_capacity(df):
     st.subheader("Capacity Prediction")
     
+    required_columns = ['Cycle', 'Charge Capacity', 'Discharge Capacity', 'Coulombic Efficiency']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    
+    if missing_columns:
+        st.warning(f"Missing columns: {', '.join(missing_columns)}. Cannot perform Capacity Prediction.")
+        return
+    
     # Prepare data
-    X = df[['Cycle', 'Charge Capacity', 'Discharge Capacity', 'Coulombic Efficiency']]
+    X = df[required_columns]
     y = df['Discharge Capacity'].shift(-1)  # Predict next cycle's capacity
     X = X[:-1]  # Remove last row
     y = y[:-1]  # Remove last row
@@ -45,10 +52,8 @@ def predict_capacity(df):
 
 def detect_anomalies(df):
     st.subheader("Anomaly Detection")
-    # Placeholder - replace with actual anomaly detection
     st.write("Anomaly detection not implemented yet.")
 
 def estimate_rul(df):
     st.subheader("Remaining Useful Life (RUL) Estimation")
-    # Placeholder - replace with actual RUL estimation
     st.write("RUL estimation not implemented yet.")
