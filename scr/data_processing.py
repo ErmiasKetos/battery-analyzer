@@ -1,7 +1,6 @@
 import pandas as pd
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 
 def basic_analysis(df):
     st.subheader("Basic Analysis")
