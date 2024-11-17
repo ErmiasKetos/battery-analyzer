@@ -6,6 +6,14 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.signal import find_peaks
 import plotly.subplots as sp
+import sklearn
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.ensemble import RandomForestRegressor, IsolationForest
+from sklearn.svm import SVR
+from sklearn.neural_network import MLPRegressor
+from sklearn.cluster import KMeans
 
 # Set page configuration
 st.set_page_config(
@@ -1053,23 +1061,6 @@ if uploaded_file is not None:
                             st.write(f"Segment {i+1}:")
                             st.write(segment.describe())
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-import plotly.subplots as sp
-from scipy.interpolate import interp1d
-from scipy.signal import find_peaks
-import sklearn
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.ensemble import RandomForestRegressor, IsolationForest
-from sklearn.svm import SVR
-from sklearn.neural_network import MLPRegressor
-from sklearn.cluster import KMeans
-from sklearn.model_selection import cross_val_score
 
 # Set page configuration
 st.set_page_config(
