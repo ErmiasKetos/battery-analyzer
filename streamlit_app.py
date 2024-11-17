@@ -1053,413 +1053,224 @@ if uploaded_file is not None:
                             st.write(f"Segment {i+1}:")
                             st.write(segment.describe())
 
-# Add more features as needed
-# Add these imports at the top
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.subplots as sp
+from scipy.interpolate import interp1d
+from scipy.signal import find_peaks
 import sklearn
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, IsolationForest
 from sklearn.svm import SVR
 from sklearn.neural_network import MLPRegressor
+from sklearn.cluster import KMeans
 from sklearn.model_selection import cross_val_score
-import joblib
 
-# Add new tab for ML Analysis
-tabs = st.tabs([
-    "📈 Capacity Analysis", 
-    "⚡ Voltage Analysis", 
-    "🔄 Differential Capacity",
-    "📊 Statistical Analysis",
-    "🤖 Machine Learning",
-    "📋 Raw Data"
-])
+# Set page configuration
+st.set_page_config(
+    page_title="Battery Data Analyzer",
+    page_icon="🔋",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Machine Learning Analysis Tab
-with tabs[4]:
-    st.subheader("🤖 Machine Learning Analysis")
+# Utility functions
+def create_features(df, window_size=5):
+    """Create features for ML models"""
+    features = []
+    targets = []
     
-    ml_analysis_type = st.radio(
-        "Select Analysis Type",
-        ["Capacity Prediction", "Anomaly Detection", "Pattern Recognition", "RUL Estimation"],
-        horizontal=True
-    )
+    for i in range(len(df) - window_size):
+        features.append(df.iloc[i:i+window_size][
+            ['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']
+        ].values.flatten())
+        targets.append(df.iloc[i+window_size]['Discharge_Capacity'])
     
-    if ml_analysis_type == "Capacity Prediction":
-        st.write("### Capacity Prediction Model")
+    return np.array(features), np.array(targets)
+
+def train_ml_model(X_train, X_test, y_train, y_test, model_type="Random Forest"):
+    """Train and evaluate ML model"""
+    if model_type == "Random Forest":
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+    elif model_type == "Support Vector Machine":
+        model = SVR(kernel='rbf')
+    else:
+        model = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000)
+    
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    
+    return model, y_pred, {
+        'mse': mean_squared_error(y_test, y_pred),
+        'r2': r2_score(y_test, y_pred)
+    }
+
+# Main application
+try:
+    st.title("🔋 Advanced Battery Data Analyzer")
+    st.write("Upload your battery cycling data for comprehensive analysis.")
+    
+    # File upload
+    uploaded_file = st.file_uploader("Choose your CSV file", type="csv")
+    
+    if uploaded_file is not None:
+        # Read and process data
+        df = pd.read_csv(uploaded_file)
         
-        # Prepare features
-        def create_features(df, window_size=5):
-            features = []
-            targets = []
+        # Create tabs
+        tabs = st.tabs([
+            "📈 Capacity Analysis",
+            "⚡ Voltage Analysis",
+            "🔄 Differential Capacity",
+            "📊 Statistical Analysis",
+            "🤖 Machine Learning",
+            "📋 Raw Data"
+        ])
+        
+        # ML Analysis Tab
+        with tabs[4]:
+            st.subheader("🤖 Machine Learning Analysis")
             
-            for i in range(len(df) - window_size):
-                features.append(df.iloc[i:i+window_size][
-                    ['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']
-                ].values.flatten())
-                targets.append(df.iloc[i+window_size]['Discharge_Capacity'])
+            ml_analysis_type = st.radio(
+                "Select Analysis Type",
+                ["Capacity Prediction", "Anomaly Detection", "Pattern Recognition", "RUL Estimation"],
+                horizontal=True
+            )
             
-            return np.array(features), np.array(targets)
-        
-        # Model selection
-        model_type = st.selectbox(
-            "Select Model Type",
-            ["Random Forest", "Support Vector Machine", "Neural Network"]
-        )
-        
-        # Model parameters
-        window_size = st.slider("Window Size", 3, 10, 5)
-        
-        # Prepare data
-        X, y = create_features(df, window_size)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # Scale features
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        
-        # Train model
-        if st.button("Train Model"):
-            with st.spinner("Training model..."):
-                if model_type == "Random Forest":
-                    model = RandomForestRegressor(n_estimators=100, random_state=42)
-                elif model_type == "Support Vector Machine":
-                    model = SVR(kernel='rbf')
-                else:
-                    model = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000)
+            if ml_analysis_type == "Capacity Prediction":
+                st.write("### Capacity Prediction Model")
                 
-                model.fit(X_train_scaled, y_train)
-                
-                # Make predictions
-                y_pred = model.predict(X_test_scaled)
-                
-                # Calculate metrics
-                mse = mean_squared_error(y_test, y_pred)
-                r2 = r2_score(y_test, y_pred)
-                
-                # Display results
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Mean Squared Error", f"{mse:.4f}")
-                with col2:
-                    st.metric("R² Score", f"{r2:.4f}")
-                
-                # Plot predictions
-                fig_pred = go.Figure()
-                
-                fig_pred.add_trace(go.Scatter(
-                    x=np.arange(len(y_test)),
-                    y=y_test,
-                    name="Actual",
-                    mode="lines+markers"
-                ))
-                
-                fig_pred.add_trace(go.Scatter(
-                    x=np.arange(len(y_pred)),
-                    y=y_pred,
-                    name="Predicted",
-                    mode="lines+markers"
-                ))
-                
-                fig_pred.update_layout(
-                    title="Model Predictions vs Actual Values",
-                    xaxis_title="Sample Index",
-                    yaxis_title="Capacity (mAh/g)"
+                # Model selection
+                model_type = st.selectbox(
+                    "Select Model Type",
+                    ["Random Forest", "Support Vector Machine", "Neural Network"]
                 )
                 
-                st.plotly_chart(fig_pred, use_container_width=True)
+                window_size = st.slider("Window Size", 3, 10, 5)
                 
-                # Feature importance (for Random Forest)
-                if model_type == "Random Forest":
-                    feat_importance = pd.DataFrame({
-                        'Feature': [f"Feature_{i}" for i in range(X.shape[1])],
-                        'Importance': model.feature_importances_
-                    }).sort_values('Importance', ascending=False)
+                if st.button("Train Model"):
+                    with st.spinner("Training model..."):
+                        # Prepare data
+                        X, y = create_features(df, window_size)
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X, y, test_size=0.2, random_state=42
+                        )
+                        
+                        # Scale features
+                        scaler = StandardScaler()
+                        X_train_scaled = scaler.fit_transform(X_train)
+                        X_test_scaled = scaler.transform(X_test)
+                        
+                        # Train and evaluate model
+                        model, y_pred, metrics = train_ml_model(
+                            X_train_scaled, X_test_scaled, y_train, y_test, model_type
+                        )
+                        
+                        # Display results
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Mean Squared Error", f"{metrics['mse']:.4f}")
+                        with col2:
+                            st.metric("R² Score", f"{metrics['r2']:.4f}")
+                        
+                        # Plot predictions
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=range(len(y_test)), y=y_test, name="Actual"))
+                        fig.add_trace(go.Scatter(x=range(len(y_pred)), y=y_pred, name="Predicted"))
+                        fig.update_layout(title="Model Predictions vs Actual Values")
+                        st.plotly_chart(fig, use_container_width=True)
+            
+            elif ml_analysis_type == "Anomaly Detection":
+                st.write("### Anomaly Detection")
+                
+                contamination = st.slider("Contamination", 0.01, 0.2, 0.1)
+                
+                if st.button("Detect Anomalies"):
+                    # Prepare data
+                    features = df[['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']]
+                    scaler = StandardScaler()
+                    features_scaled = scaler.fit_transform(features)
                     
-                    st.write("### Feature Importance")
-                    fig_imp = px.bar(
-                        feat_importance,
-                        x='Feature',
-                        y='Importance',
-                        title="Feature Importance"
-                    )
-                    st.plotly_chart(fig_imp, use_container_width=True)
-                
-                # Save model
-                if st.button("Download Model"):
-                    joblib.dump(model, 'battery_model.joblib')
-                    st.download_button(
-                        label="Download trained model",
-                        data=open('battery_model.joblib', 'rb'),
-                        file_name='battery_model.joblib',
-                        mime='application/octet-stream'
-                    )
-    
-    elif ml_analysis_type == "Anomaly Detection":
-        st.write("### Anomaly Detection")
-        
-        from sklearn.ensemble import IsolationForest
-        from sklearn.preprocessing import StandardScaler
-        
-        # Prepare data for anomaly detection
-        features = df[['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency', 'Voltage_Gap']]
-        
-        # Scale features
-        scaler = StandardScaler()
-        features_scaled = scaler.fit_transform(features)
-        
-        # Anomaly detection parameters
-        contamination = st.slider(
-            "Contamination (expected proportion of anomalies)",
-            0.01, 0.2, 0.1
-        )
-        
-        if st.button("Detect Anomalies"):
-            # Train isolation forest
-            iso_forest = IsolationForest(
-                contamination=contamination,
-                random_state=42
-            )
-            
-            # Fit and predict
-            anomalies = iso_forest.fit_predict(features_scaled)
-            df['anomaly'] = anomalies
-            
-            # Plot results
-            fig_anomaly = go.Figure()
-            
-            # Normal points
-            normal_mask = df['anomaly'] == 1
-            fig_anomaly.add_trace(go.Scatter(
-                x=df[normal_mask]['Cycle'],
-                y=df[normal_mask]['Discharge_Capacity'],
-                mode='markers',
-                name='Normal',
-                marker=dict(color='blue')
-            ))
-            
-            # Anomaly points
-            anomaly_mask = df['anomaly'] == -1
-            fig_anomaly.add_trace(go.Scatter(
-                x=df[anomaly_mask]['Cycle'],
-                y=df[anomaly_mask]['Discharge_Capacity'],
-                mode='markers',
-                name='Anomaly',
-                marker=dict(color='red')
-            ))
-            
-            fig_anomaly.update_layout(
-                title="Anomaly Detection Results",
-                xaxis_title="Cycle Number",
-                yaxis_title="Discharge Capacity (mAh/g)"
-            )
-            
-            st.plotly_chart(fig_anomaly, use_container_width=True)
-            
-            # Anomaly statistics
-            st.write("### Anomaly Statistics")
-            st.write(f"Number of anomalies detected: {sum(anomaly_mask)}")
-            
-            if sum(anomaly_mask) > 0:
-                st.write("### Anomalous Cycles")
-                st.write(df[anomaly_mask][['Cycle', 'Discharge_Capacity', 'Coulombic_Efficiency']])
-    
-    elif ml_analysis_type == "Pattern Recognition":
-        st.write("### Pattern Recognition")
-        
-        from sklearn.cluster import KMeans
-        from sklearn.preprocessing import StandardScaler
-        
-        # Feature selection
-        features_for_clustering = st.multiselect(
-            "Select features for pattern recognition",
-            ['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency', 'Voltage_Gap'],
-            default=['Discharge_Capacity', 'Coulombic_Efficiency']
-        )
-        
-        if features_for_clustering:
-            # Number of clusters
-            n_clusters = st.slider("Number of patterns to identify", 2, 10, 3)
-            
-            # Prepare data
-            X = df[features_for_clustering]
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
-            
-            if st.button("Identify Patterns"):
-                # Perform clustering
-                kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-                clusters = kmeans.fit_predict(X_scaled)
-                
-                # Add cluster information to dataframe
-                df['pattern'] = clusters
-                
-                # Plot patterns
-                fig_patterns = go.Figure()
-                
-                for i in range(n_clusters):
-                    mask = df['pattern'] == i
-                    fig_patterns.add_trace(go.Scatter(
-                        x=df[mask]['Cycle'],
-                        y=df[mask]['Discharge_Capacity'],
+                    # Detect anomalies
+                    iso_forest = IsolationForest(contamination=contamination, random_state=42)
+                    anomalies = iso_forest.fit_predict(features_scaled)
+                    
+                    # Plot results
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=df[anomalies == 1]['Cycle'],
+                        y=df[anomalies == 1]['Discharge_Capacity'],
                         mode='markers',
-                        name=f'Pattern {i+1}'
+                        name='Normal'
                     ))
+                    fig.add_trace(go.Scatter(
+                        x=df[anomalies == -1]['Cycle'],
+                        y=df[anomalies == -1]['Discharge_Capacity'],
+                        mode='markers',
+                        name='Anomaly',
+                        marker=dict(color='red')
+                    ))
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            elif ml_analysis_type == "Pattern Recognition":
+                st.write("### Pattern Recognition")
                 
-                fig_patterns.update_layout(
-                    title="Identified Patterns in Cycling Data",
-                    xaxis_title="Cycle Number",
-                    yaxis_title="Discharge Capacity (mAh/g)"
-                )
+                n_clusters = st.slider("Number of patterns", 2, 10, 3)
                 
-                st.plotly_chart(fig_patterns, use_container_width=True)
+                if st.button("Identify Patterns"):
+                    # Prepare data
+                    features = df[['Discharge_Capacity', 'Coulombic_Efficiency']]
+                    scaler = StandardScaler()
+                    features_scaled = scaler.fit_transform(features)
+                    
+                    # Perform clustering
+                    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+                    clusters = kmeans.fit_predict(features_scaled)
+                    
+                    # Plot results
+                    fig = go.Figure()
+                    for i in range(n_clusters):
+                        mask = clusters == i
+                        fig.add_trace(go.Scatter(
+                            x=df[mask]['Cycle'],
+                            y=df[mask]['Discharge_Capacity'],
+                            mode='markers',
+                            name=f'Pattern {i+1}'
+                        ))
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            else:  # RUL Estimation
+                st.write("### Remaining Useful Life Estimation")
                 
-                # Pattern characteristics
-                st.write("### Pattern Characteristics")
-                pattern_stats = df.groupby('pattern')[features_for_clustering].describe()
-                st.write(pattern_stats)
-    
-    elif ml_analysis_type == "RUL Estimation":
-        st.write("### Remaining Useful Life (RUL) Estimation")
-        
-        # Define capacity threshold
-        initial_capacity = df['Discharge_Capacity'].iloc[0]
-        current_capacity = df['Discharge_Capacity'].iloc[-1]
-        
-        threshold = st.slider(
-            "Capacity Threshold (% of initial capacity)",
-            min_value=60,
-            max_value=90,
-            value=80
-        )
-        
-        capacity_threshold = initial_capacity * threshold / 100
-        
-        # Prepare data for RUL prediction
-        X = df[['Cycle', 'Discharge_Capacity', 'Coulombic_Efficiency']]
-        y = df['Discharge_Capacity']
-        
-        if st.button("Estimate RUL"):
-            # Train RUL model
-            model = RandomForestRegressor(n_estimators=100, random_state=42)
-            model.fit(X[:-10], y[:-10])  # Use all but last 10 cycles for training
-            
-            # Predict future cycles
-            future_cycles = np.arange(
-                df['Cycle'].max(),
-                df['Cycle'].max() + 100
-            )
-            
-            # Create future feature matrix
-            future_X = pd.DataFrame({
-                'Cycle': future_cycles,
-                'Discharge_Capacity': [current_capacity] * len(future_cycles),
-                'Coulombic_Efficiency': [df['Coulombic_Efficiency'].iloc[-1]] * len(future_cycles)
-            })
-            
-            # Predict future capacity
-            future_capacity = model.predict(future_X)
-            
-            # Find RUL
-            rul_cycle = None
-            for cycle, capacity in zip(future_cycles, future_capacity):
-                if capacity < capacity_threshold:
-                    rul_cycle = cycle
-                    break
-            
-            # Plot predictions
-            fig_rul = go.Figure()
-            
-            # Historical data
-            fig_rul.add_trace(go.Scatter(
-                x=df['Cycle'],
-                y=df['Discharge_Capacity'],
-                name="Historical Data",
-                mode="lines+markers"
-            ))
-            
-            # Predictions
-            fig_rul.add_trace(go.Scatter(
-                x=future_cycles,
-                y=future_capacity,
-                name="Predicted",
-                mode="lines",
-                line=dict(dash='dash')
-            ))
-            
-            # Threshold line
-            fig_rul.add_hline(
-                y=capacity_threshold,
-                line_dash="dash",
-                line_color="red",
-                annotation_text=f"{threshold}% Threshold"
-            )
-            
-            fig_rul.update_layout(
-                title="RUL Estimation",
-                xaxis_title="Cycle Number",
-                yaxis_title="Discharge Capacity (mAh/g)"
-            )
-            
-            st.plotly_chart(fig_rul, use_container_width=True)
-            
-            if rul_cycle:
-                remaining_cycles = rul_cycle - df['Cycle'].max()
-                st.success(f"Estimated Remaining Useful Life: {remaining_cycles:.0f} cycles")
-            else:
-                st.info("No end of life detected within prediction range")
+                threshold = st.slider("Capacity Threshold (%)", 60, 90, 80)
+                
+                if st.button("Estimate RUL"):
+                    # Prepare data
+                    initial_capacity = df['Discharge_Capacity'].iloc[0]
+                    threshold_capacity = initial_capacity * threshold / 100
+                    
+                    # Train model
+                    X = df[['Cycle']]
+                    y = df['Discharge_Capacity']
+                    model = RandomForestRegressor(n_estimators=100)
+                    model.fit(X, y)
+                    
+                    # Predict future cycles
+                    future_cycles = np.arange(df['Cycle'].max(), df['Cycle'].max() + 100)
+                    future_capacity = model.predict(future_cycles.reshape(-1, 1))
+                    
+                    # Plot results
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=df['Cycle'], y=df['Discharge_Capacity'], name='Historical'))
+                    fig.add_trace(go.Scatter(x=future_cycles, y=future_capacity, name='Predicted'))
+                    fig.add_hline(y=threshold_capacity, line_dash="dash", line_color="red")
+                    st.plotly_chart(fig, use_container_width=True)
 
-# Add Raw Data tab
-with tabs[5]:
-    st.subheader("Raw Data")
-    
-    # Display data filters
-    col1, col2 = st.columns(2)
-    with col1:
-        cycle_range = st.slider(
-            "Cycle Range",
-            int(df['Cycle'].min()),
-            int(df['Cycle'].max()),
-            (int(df['Cycle'].min()), int(df['Cycle'].max()))
-        )
-    
-    with col2:
-        columns_to_display = st.multiselect(
-            "Select Columns",
-            df.columns.tolist(),
-            default=df.columns.tolist()
-        )
-    
-    # Filter and display data
-    filtered_df = df[
-        (df['Cycle'] >= cycle_range[0]) &
-        (df['Cycle'] <= cycle_range[1])
-    ][columns_to_display]
-    
-    st.dataframe(filtered_df)
-    
-    # Download options
-    if st.button("Download Data"):
-        csv = filtered_df.to_csv(index=False)
-        st.download_button(
-            label="Download as CSV",
-            data=csv,
-            file_name='battery_data.csv',
-            mime='text/csv'
-        )
-
-# Add a footer with information
-st.markdown("""---""")
-st.markdown("""
-    ### 📝 Notes
-    - All machine learning models are for analysis purposes only
-    - Predictions should be validated with experimental data
-    - Download model and data for further analysis
-    
-    ### 🔍 Analysis Features
-    - Capacity prediction using various ML models
-    - Anomaly detection in cycling data
-    - Pattern recognition in battery behavior
-    - RUL estimation based on capacity fade
-""")
+except Exception as e:
+    st.error(f"An error occurred: {str(e)}")
+    st.write("Please check your data format and try again.")
