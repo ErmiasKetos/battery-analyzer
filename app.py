@@ -9,10 +9,9 @@ from scr.li_s_features import polysulfide_shuttle_assessment, lithium_metal_anod
 from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 
+st.set_page_config(page_title="Li-S Battery Analyzer", layout="wide")
 
-st.set_page_config(page_title="Advanced Battery Data Analyzer", layout="wide")
-
-st.title("Advanced Battery Data Analyzer")
+st.title("Li-S Battery Charge-Discharge Cycle Analyzer")
 
 # Sidebar for data upload and analysis options
 st.sidebar.header("Data Upload & Analysis Options")
@@ -85,20 +84,20 @@ if uploaded_files:
         with col2:
             st.subheader("Lithium Metal Anode Monitoring")
             lithium_metal_anode_monitoring(df)
-
-elif analysis_type == "ML Analysis":
-    st.header("Machine Learning Analysis")
     
-    tab1, tab2, tab3 = st.tabs(["Capacity Prediction", "Anomaly Detection", "RUL Estimation"])
-    
-    with tab1:
-        predict_capacity(df)
-    
-    with tab2:
-        detect_anomalies(df)
-    
-    with tab3:
-        estimate_rul(df)
+    elif analysis_type == "ML Analysis":
+        st.header("Machine Learning Analysis")
+        
+        tab1, tab2, tab3 = st.tabs(["Capacity Prediction", "Anomaly Detection", "RUL Estimation"])
+        
+        with tab1:
+            predict_capacity(df)
+        
+        with tab2:
+            detect_anomalies(df)
+        
+        with tab3:
+            estimate_rul(df)
     
     # Data Export
     st.sidebar.header("Data Export")
