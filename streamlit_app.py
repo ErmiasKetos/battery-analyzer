@@ -107,7 +107,7 @@ try:
                     with cols[2]:
                         st.metric("Average Voltage Gap", f"{metrics['Voltage_Gap']:.3f}V")
 # Capacity Analysis tab
-        with tabs[1]:
+        with tabs[0]:
             st.subheader("🔋 Detailed Capacity Analysis")
             
             # Create expandable sections for different analyses
@@ -582,7 +582,297 @@ try:
                         file_name="voltage_statistics.csv",
                         mime="text/csv"
                     )
+           # dQ/dV Analysis Tab
+            with tabs[2]:
+                st.subheader("🔄 Differential Capacity Analysis (dQ/dV)")
+                
+                with st.expander("ℹ️ About dQ/dV Analysis", expanded=False):
+                    st.write("""
+                    The differential capacity (dQ/dV) analysis reveals:
+                    - **Phase transitions:** Peaks indicate voltage plateaus where phase transitions occur
+                    - **Reaction mechanisms:** Peak positions show reaction voltages
+                    - **Degradation:** Changes in peak height/position indicate material degradation
+                    - **Material characteristics:** Peak shape relates to reaction kinetics
+                    """)
+                
+                # Analysis settings
+                with st.expander("⚙️ Analysis Settings", expanded=True):
+                    col1, col2, col3 = st.columns(3)
                     
+                    with col1:
+                        selected_cycles = st.multiselect(
+                            "Select cycles for analysis",
+                            options=sorted(df['Cycle'].unique()),
+                            default=[df['Cycle'].iloc[0], df['Cycle'].iloc[-1]]
+                        )
+                    
+                    with col2:
+                        points_dqdv = st.slider(
+                            "Interpolation points",
+                            min_value=100,
+                            max_value=2000,
+                            value=1000,
+                            step=100,
+                            help="More points = smoother curve but slower calculation"
+                        )
+                    
+                    with col3:
+                        plot_type = st.radio(
+                            "Analysis type",
+                            ["Charge", "Discharge", "Both"],
+                            horizontal=True
+                        )
+                
+                if selected_cycles:
+                    # Main dQ/dV plot
+                    with st.expander("📈 dQ/dV Analysis", expanded=True):
+                        fig_dqdv = go.Figure()
+                        
+                        # Process each selected cycle
+                        for cycle in selected_cycles:
+                            cycle_data = df[df['Cycle'] == cycle]
+                            
+                            if plot_type in ["Charge", "Both"]:
+                                v_charge, dqdv_charge = calculate_dqdv_proper(
+                                    cycle_data['Charge_Voltage'].values,
+                                    cycle_data['Charge_Capacity'].values,
+                                    points_dqdv
+                                )
+                                
+                                if v_charge is not None:
+                                    fig_dqdv.add_trace(go.Scatter(
+                                        x=v_charge,
+                                        y=dqdv_charge,
+                                        name=f'Cycle {cycle} (Charge)',
+                                        line=dict(dash='solid')
+                                    ))
+                            
+                            if plot_type in ["Discharge", "Both"]:
+                                v_discharge, dqdv_discharge = calculate_dqdv_proper(
+                                    cycle_data['Discharge_Voltage'].values,
+                                    cycle_data['Discharge_Capacity'].values,
+                                    points_dqdv
+                                )
+                                
+                                if v_discharge is not None:
+                                    fig_dqdv.add_trace(go.Scatter(
+                                        x=v_discharge,
+                                        y=-dqdv_discharge,  # Negative for conventional plotting
+                                        name=f'Cycle {cycle} (Discharge)',
+                                        line=dict(dash='dot')
+                                    ))
+                        
+                        fig_dqdv.update_layout(
+                            title='Differential Capacity Analysis',
+                            xaxis_title='Voltage (V)',
+                            yaxis_title='dQ/dV (mAh/V)',
+                            height=600,
+                            hovermode='x unified'
+                        )
+                        
+                        st.plotly_chart(fig_dqdv, use_container_width=True)
+                    
+                    # Peak analysis
+                    with st.expander("🔍 Peak Analysis"):
+                        # Peak detection settings
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            prominence = st.slider(
+                                "Peak prominence",
+                                min_value=0.01,
+                                max_value=1.0,
+                                value=0.1,
+                                step=0.01,
+                                help="Higher value = fewer peaks detected"
+                            )
+                        with col2:
+                            width = st.slider(
+                                "Minimum peak width",
+                                min_value=1,
+                                max_value=50,
+                                value=5,
+                                help="Minimum number of points for peak"
+                            )
+                        
+                        # Analyze peaks for each cycle
+                        peak_data = []
+                        
+                        for cycle in selected_cycles:
+                            cycle_data = df[df['Cycle'] == cycle]
+                            
+                            # Analyze charge peaks
+                            v_charge, dqdv_charge = calculate_dqdv_proper(
+                                cycle_data['Charge_Voltage'].values,
+                                cycle_data['Charge_Capacity'].values,
+                                points_dqdv
+                            )
+                            
+                            if v_charge is not None:
+                                peaks, properties = find_peaks(
+                                    dqdv_charge,
+                                    prominence=prominence,
+                                    width=width
+                                )
+                                
+                                for i, peak in enumerate(peaks):
+                                    peak_data.append({
+                                        'Cycle': cycle,
+                                        'Process': 'Charge',
+                                        'Peak Voltage': v_charge[peak],
+                                        'Peak Height': dqdv_charge[peak],
+                                        'Prominence': properties['prominences'][i],
+                                        'Width': properties['widths'][i]
+                                    })
+                            
+                            # Analyze discharge peaks
+                            v_discharge, dqdv_discharge = calculate_dqdv_proper(
+                                cycle_data['Discharge_Voltage'].values,
+                                cycle_data['Discharge_Capacity'].values,
+                                points_dqdv
+                            )
+                            
+                            if v_discharge is not None:
+                                peaks, properties = find_peaks(
+                                    -dqdv_discharge,  # Negative for consistent peak direction
+                                    prominence=prominence,
+                                    width=width
+                                )
+                                
+                                for i, peak in enumerate(peaks):
+                                    peak_data.append({
+                                        'Cycle': cycle,
+                                        'Process': 'Discharge',
+                                        'Peak Voltage': v_discharge[peak],
+                                        'Peak Height': -dqdv_discharge[peak],
+                                        'Prominence': properties['prominences'][i],
+                                        'Width': properties['widths'][i]
+                                    })
+                        
+                        if peak_data:
+                            # Create peak data DataFrame
+                            peak_df = pd.DataFrame(peak_data)
+                            
+                            # Display peak data
+                            st.write("### Detected Peaks")
+                            st.dataframe(peak_df.round(3))
+                            
+                            # Plot peak evolution
+                            fig_peaks = go.Figure()
+                            
+                            # Plot charge peaks
+                            charge_peaks = peak_df[peak_df['Process'] == 'Charge']
+                            if not charge_peaks.empty:
+                                fig_peaks.add_trace(go.Scatter(
+                                    x=charge_peaks['Cycle'],
+                                    y=charge_peaks['Peak Voltage'],
+                                    mode='markers',
+                                    name='Charge Peaks',
+                                    marker=dict(
+                                        size=charge_peaks['Peak Height'].abs() * 20,
+                                        color='red'
+                                    )
+                                ))
+                            
+                            # Plot discharge peaks
+                            discharge_peaks = peak_df[peak_df['Process'] == 'Discharge']
+                            if not discharge_peaks.empty:
+                                fig_peaks.add_trace(go.Scatter(
+                                    x=discharge_peaks['Cycle'],
+                                    y=discharge_peaks['Peak Voltage'],
+                                    mode='markers',
+                                    name='Discharge Peaks',
+                                    marker=dict(
+                                        size=discharge_peaks['Peak Height'].abs() * 20,
+                                        color='blue'
+                                    )
+                                ))
+                            
+                            fig_peaks.update_layout(
+                                title='Peak Evolution',
+                                xaxis_title='Cycle Number',
+                                yaxis_title='Peak Voltage (V)',
+                                height=400
+                            )
+                            
+                            st.plotly_chart(fig_peaks, use_container_width=True)
+                            
+                            # Download peak data
+                            csv = peak_df.to_csv(index=False)
+                            st.download_button(
+                                label="Download Peak Data",
+                                data=csv,
+                                file_name="peak_analysis.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.warning("No peaks detected with current settings")
+                    
+                    # Peak comparison
+                    with st.expander("📊 Peak Evolution Analysis"):
+                        if len(selected_cycles) > 1:
+                            # Calculate peak changes
+                            peak_changes = []
+                            baseline_cycle = selected_cycles[0]
+                            
+                            for cycle in selected_cycles[1:]:
+                                baseline_peaks = peak_df[
+                                    (peak_df['Cycle'] == baseline_cycle) &
+                                    (peak_df['Process'] == 'Charge')
+                                ]['Peak Voltage'].values
+                                
+                                current_peaks = peak_df[
+                                    (peak_df['Cycle'] == cycle) &
+                                    (peak_df['Process'] == 'Charge')
+                                ]['Peak Voltage'].values
+                                
+                                # Find closest peaks
+                                for bp in baseline_peaks:
+                                    if len(current_peaks) > 0:
+                                        closest_peak = current_peaks[
+                                            np.abs(current_peaks - bp).argmin()
+                                        ]
+                                        
+                                        peak_changes.append({
+                                            'Baseline Cycle': baseline_cycle,
+                                            'Compare Cycle': cycle,
+                                            'Baseline Voltage': bp,
+                                            'Current Voltage': closest_peak,
+                                            'Voltage Shift': closest_peak - bp
+                                        })
+                            
+                            if peak_changes:
+                                changes_df = pd.DataFrame(peak_changes)
+                                
+                                st.write("### Peak Position Changes")
+                                st.dataframe(changes_df.round(4))
+                                
+                                # Plot peak shifts
+                                fig_shifts = go.Figure()
+                                
+                                for peak_v in changes_df['Baseline Voltage'].unique():
+                                    peak_data = changes_df[
+                                        changes_df['Baseline Voltage'] == peak_v
+                                    ]
+                                    
+                                    fig_shifts.add_trace(go.Scatter(
+                                        x=peak_data['Compare Cycle'],
+                                        y=peak_data['Voltage Shift'],
+                                        name=f'Peak at {peak_v:.2f}V',
+                                        mode='lines+markers'
+                                    ))
+                                
+                                fig_shifts.update_layout(
+                                    title='Peak Voltage Shifts',
+                                    xaxis_title='Cycle Number',
+                                    yaxis_title='Voltage Shift (V)',
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig_shifts, use_container_width=True)
+                            else:
+                                st.warning("No comparable peaks found between cycles")
+                        else:
+                            st.info("Select multiple cycles to analyze peak evolution")         
                 
         # Add other tabs...
 
