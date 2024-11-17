@@ -167,7 +167,197 @@ if uploaded_file is not None:
                 "📋 Raw Data"
             ])
             
-            # Rest of your tab code...
+      # Replace the "# Rest of your tab code..." section with this code:
+
+            # Tab 1: Capacity Analysis
+            with tabs[0]:
+                st.subheader("Capacity Analysis")
+                
+                # Display metrics
+                metrics = calculate_capacity_metrics(df)
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Initial Capacity", f"{metrics['Initial Discharge Capacity']:.2f} mAh/g")
+                    st.metric("Final Capacity", f"{metrics['Final Discharge Capacity']:.2f} mAh/g")
+                
+                with col2:
+                    st.metric("Capacity Retention", f"{metrics['Capacity Retention']:.1f}%")
+                    st.metric("Average Capacity", f"{metrics['Average Discharge Capacity']:.2f} mAh/g")
+                
+                with col3:
+                    st.metric("Capacity Loss Rate", f"{metrics['Capacity Loss Rate']:.4f}%/cycle")
+                
+                # Create capacity plots
+                fig1 = go.Figure()
+                
+                # Add discharge capacity
+                fig1.add_trace(go.Scatter(
+                    x=df['Cycle'],
+                    y=df['Discharge_Capacity'],
+                    name='Discharge Capacity',
+                    line=dict(color='blue')
+                ))
+                
+                # Add charge capacity
+                fig1.add_trace(go.Scatter(
+                    x=df['Cycle'],
+                    y=df['Charge_Capacity'],
+                    name='Charge Capacity',
+                    line=dict(color='red')
+                ))
+                
+                fig1.update_layout(
+                    title='Capacity vs Cycle Number',
+                    xaxis_title='Cycle Number',
+                    yaxis_title='Capacity (mAh/g)',
+                    height=500
+                )
+                
+                st.plotly_chart(fig1, use_container_width=True)
+                
+                # Calculate and plot efficiency
+                df['Coulombic_Efficiency'] = (df['Discharge_Capacity'] / df['Charge_Capacity'] * 100)
+                
+                fig2 = go.Figure()
+                fig2.add_trace(go.Scatter(
+                    x=df['Cycle'],
+                    y=df['Coulombic_Efficiency'],
+                    name='Coulombic Efficiency',
+                    line=dict(color='green')
+                ))
+                
+                fig2.update_layout(
+                    title='Coulombic Efficiency vs Cycle Number',
+                    xaxis_title='Cycle Number',
+                    yaxis_title='Efficiency (%)',
+                    height=400
+                )
+                
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            # Tab 2: Voltage Analysis
+            with tabs[1]:
+                st.subheader("Voltage Analysis")
+                
+                voltage_metrics = calculate_voltage_metrics(df)
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.metric("Average Charge Voltage", f"{voltage_metrics['Average Charge Voltage']:.3f} V")
+                    st.metric("Average Discharge Voltage", f"{voltage_metrics['Average Discharge Voltage']:.3f} V")
+                
+                with col2:
+                    st.metric("Average Voltage Gap", f"{voltage_metrics['Average Voltage Gap']:.3f} V")
+                    st.metric("Maximum Voltage Gap", f"{voltage_metrics['Maximum Voltage Gap']:.3f} V")
+                
+                # Voltage profile plots
+                fig3 = go.Figure()
+                
+                fig3.add_trace(go.Scatter(
+                    x=df['Cycle'],
+                    y=df['Charge_Voltage'],
+                    name='Charge Voltage',
+                    line=dict(color='red')
+                ))
+                
+                fig3.add_trace(go.Scatter(
+                    x=df['Cycle'],
+                    y=df['Discharge_Voltage'],
+                    name='Discharge Voltage',
+                    line=dict(color='blue')
+                ))
+                
+                fig3.update_layout(
+                    title='Voltage Profiles',
+                    xaxis_title='Cycle Number',
+                    yaxis_title='Voltage (V)',
+                    height=500
+                )
+                
+                st.plotly_chart(fig3, use_container_width=True)
+            
+            # Tab 3: Differential Capacity
+            with tabs[2]:
+                st.subheader("Differential Capacity Analysis (dQ/dE)")
+                
+                # Select cycle for analysis
+                cycle_number = st.selectbox(
+                    "Select cycle for analysis",
+                    options=sorted(df['Cycle'].unique())
+                )
+                
+                # Get data for selected cycle
+                cycle_data = df[df['Cycle'] == cycle_number]
+                
+                # Calculate dQ/dV
+                charge_v, charge_dqdv = calculate_dqdv_proper(
+                    cycle_data['Charge_Voltage'].values,
+                    cycle_data['Charge_Capacity'].values
+                )
+                
+                if charge_v is not None:
+                    fig4 = go.Figure()
+                    
+                    fig4.add_trace(go.Scatter(
+                        x=charge_v,
+                        y=charge_dqdv,
+                        name='dQ/dV',
+                        line=dict(color='blue')
+                    ))
+                    
+                    fig4.update_layout(
+                        title=f'Differential Capacity Analysis - Cycle {cycle_number}',
+                        xaxis_title='Voltage (V)',
+                        yaxis_title='dQ/dV (mAh/V)',
+                        height=500
+                    )
+                    
+                    st.plotly_chart(fig4, use_container_width=True)
+                else:
+                    st.warning("Could not calculate dQ/dV for this cycle")
+            
+            # Tab 4: Statistical Analysis
+            with tabs[3]:
+                st.subheader("Statistical Analysis")
+                
+                # Basic statistics
+                st.write("### Basic Statistics")
+                stats_df = df[['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']].describe()
+                st.write(stats_df)
+                
+                # Correlation analysis
+                st.write("### Correlation Analysis")
+                corr_matrix = df[['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']].corr()
+                
+                fig5 = px.imshow(
+                    corr_matrix,
+                    text=corr_matrix.values.round(3),
+                    aspect='auto',
+                    color_continuous_scale='RdBu'
+                )
+                
+                fig5.update_layout(
+                    title='Correlation Matrix',
+                    height=400
+                )
+                
+                st.plotly_chart(fig5, use_container_width=True)
+            
+            # Tab 5: Raw Data
+            with tabs[4]:
+                st.subheader("Raw Data")
+                st.write(df)
+                
+                # Download button
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="Download Processed Data",
+                    data=csv,
+                    file_name="processed_battery_data.csv",
+                    mime="text/csv"
+                )
+    
             
     except Exception as e:
         st.error(f"Error processing file: {str(e)}")
