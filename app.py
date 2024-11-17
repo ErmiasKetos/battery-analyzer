@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from scr.data_processing import upload_data, preview_data, data_processing_main
-from scr.advanced_analysis import voltage_profiles, polarization_analysis, kinetics_analysis, degradation_rate
+from scr.advanced_analysis import voltage_profiles, polarization_analysis, kinetics_analysis, degradation_rate, advanced_analysis_main
 from scr.visualization import plot_capacity_vs_cycle, plot_voltage_vs_capacity, plot_dq_de_curves
 from scr.li_s_features import polysulfide_shuttle_assessment, lithium_metal_anode_monitoring
 from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
@@ -63,23 +63,8 @@ if uploaded_file:
         else:
             if analysis_type == "Data Processing and Basic Analysis":
                 st.session_state.df = data_processing_main(st.session_state.df)
-        elif analysis_type == "Advanced Analysis": 
-            advanced_analysis_main(st.session_state.df)
-                
-                tab1, tab2, tab3, tab4 = st.tabs(["Voltage Profiles", "Polarization", "Kinetics", "Degradation Rate"])
-                
-                with tab1:
-                    voltage_profiles(st.session_state.df)
-                
-                with tab2:
-                    polarization_analysis(st.session_state.df)
-                
-                with tab3:
-                    kinetics_analysis(st.session_state.df)
-                
-                with tab4:
-                    degradation_rate(st.session_state.df)
-            
+            elif analysis_type == "Advanced Analysis":
+                advanced_analysis_main(st.session_state.df)
             elif analysis_type == "Li-S Specific Analysis":
                 st.header("Li-S Specific Analysis")
                 
