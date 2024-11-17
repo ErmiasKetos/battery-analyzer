@@ -12,7 +12,7 @@ from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 
 st.set_page_config(page_title="Li-S Battery Analyzer", layout="wide")
 
-st.title("Advanced Battery Data Analyzer")
+st.title("Li-S Battery Charge-Discharge Cycle Analyzer")
 
 # Sidebar for data upload and analysis options
 st.sidebar.header("Data Upload & Analysis Options")
