@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.ensemble import RandomForestRegressor, IsolationForest
 from sklearn.cluster import KMeans
+from scipy.stats import gaussian_kde
 
 # Page config must be the first Streamlit command
 st.set_page_config(page_title="Battery Data Analyzer", page_icon="🔋", layout="wide")
@@ -105,7 +106,262 @@ try:
                         st.metric("Average Efficiency", f"{metrics['Average_Efficiency']:.1f}%")
                     with cols[2]:
                         st.metric("Average Voltage Gap", f"{metrics['Voltage_Gap']:.3f}V")
-
+# Capacity Analysis tab
+        with tabs[1]:
+            st.subheader("🔋 Detailed Capacity Analysis")
+            
+            # Create expandable sections for different analyses
+            with st.expander("📊 Capacity Metrics", expanded=True):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "Initial Capacity", 
+                        f"{df['Discharge_Capacity'].iloc[0]:.1f} mAh/g",
+                        help="First cycle discharge capacity"
+                    )
+                    st.metric(
+                        "Final Capacity", 
+                        f"{df['Discharge_Capacity'].iloc[-1]:.1f} mAh/g",
+                        delta=f"{(df['Discharge_Capacity'].iloc[-1] - df['Discharge_Capacity'].iloc[0]):.1f}",
+                        help="Last cycle discharge capacity"
+                    )
+                
+                with col2:
+                    retention = (df['Discharge_Capacity'].iloc[-1] / df['Discharge_Capacity'].iloc[0] * 100)
+                    st.metric(
+                        "Capacity Retention",
+                        f"{retention:.1f}%",
+                        help="Percentage of initial capacity retained"
+                    )
+                    avg_capacity = df['Discharge_Capacity'].mean()
+                    st.metric(
+                        "Average Capacity",
+                        f"{avg_capacity:.1f} mAh/g",
+                        help="Mean discharge capacity across all cycles"
+                    )
+                
+                with col3:
+                    fade_rate = ((df['Discharge_Capacity'].iloc[0] - df['Discharge_Capacity'].iloc[-1]) / 
+                               (len(df) * df['Discharge_Capacity'].iloc[0]) * 100)
+                    st.metric(
+                        "Capacity Fade Rate",
+                        f"{fade_rate:.4f}%/cycle",
+                        help="Average capacity loss per cycle"
+                    )
+                    stability = df['Discharge_Capacity'].std() / df['Discharge_Capacity'].mean() * 100
+                    st.metric(
+                        "Capacity Stability",
+                        f"{stability:.2f}% CV",
+                        help="Coefficient of variation in capacity"
+                    )
+            
+            # Capacity vs Cycle plot with customization options
+            with st.expander("📈 Capacity vs Cycle", expanded=True):
+                col1, col2 = st.columns([3, 1])
+                
+                with col2:
+                    # Plot customization options
+                    show_charge = st.checkbox("Show Charge Capacity", value=True)
+                    show_efficiency = st.checkbox("Show Coulombic Efficiency", value=True)
+                    normalize = st.checkbox("Normalize Capacity", value=False)
+                    rolling_avg = st.checkbox("Show Moving Average", value=False)
+                    
+                    if rolling_avg:
+                        window = st.slider("Window Size", 3, 20, 5)
+                
+                with col1:
+                    fig = go.Figure()
+                    
+                    # Discharge capacity
+                    y_discharge = (df['Discharge_Capacity'] / df['Discharge_Capacity'].iloc[0] * 100) if normalize \
+                                else df['Discharge_Capacity']
+                    
+                    if rolling_avg:
+                        y_discharge_smooth = y_discharge.rolling(window=window).mean()
+                        fig.add_trace(go.Scatter(
+                            x=df['Cycle'],
+                            y=y_discharge_smooth,
+                            name='Discharge (MA)',
+                            line=dict(color='blue', width=2)
+                        ))
+                        
+                    fig.add_trace(go.Scatter(
+                        x=df['Cycle'],
+                        y=y_discharge,
+                        name='Discharge Capacity',
+                        line=dict(color='blue', width=1 if rolling_avg else 2),
+                        opacity=0.5 if rolling_avg else 1
+                    ))
+                    
+                    # Charge capacity
+                    if show_charge:
+                        y_charge = (df['Charge_Capacity'] / df['Charge_Capacity'].iloc[0] * 100) if normalize \
+                                 else df['Charge_Capacity']
+                        
+                        if rolling_avg:
+                            y_charge_smooth = y_charge.rolling(window=window).mean()
+                            fig.add_trace(go.Scatter(
+                                x=df['Cycle'],
+                                y=y_charge_smooth,
+                                name='Charge (MA)',
+                                line=dict(color='red', width=2)
+                            ))
+                            
+                        fig.add_trace(go.Scatter(
+                            x=df['Cycle'],
+                            y=y_charge,
+                            name='Charge Capacity',
+                            line=dict(color='red', width=1 if rolling_avg else 2),
+                            opacity=0.5 if rolling_avg else 1
+                        ))
+                    
+                    # Coulombic efficiency
+                    if show_efficiency:
+                        efficiency = df['Discharge_Capacity'] / df['Charge_Capacity'] * 100
+                        fig.add_trace(go.Scatter(
+                            x=df['Cycle'],
+                            y=efficiency,
+                            name='Coulombic Efficiency',
+                            yaxis='y2',
+                            line=dict(color='green', width=1)
+                        ))
+                    
+                    # Update layout
+                    fig.update_layout(
+                        title='Capacity and Efficiency vs Cycle Number',
+                        xaxis_title='Cycle Number',
+                        yaxis_title='Capacity (%)' if normalize else 'Capacity (mAh/g)',
+                        yaxis2=dict(
+                            title='Coulombic Efficiency (%)',
+                            overlaying='y',
+                            side='right',
+                            range=[90, 101] if show_efficiency else None
+                        ) if show_efficiency else None,
+                        height=500,
+                        hovermode='x unified'
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            # Capacity fade analysis
+            with st.expander("📉 Capacity Fade Analysis"):
+                # Calculate capacity retention at different intervals
+                intervals = st.slider(
+                    "Select analysis intervals",
+                    min_value=5,
+                    max_value=50,
+                    value=10,
+                    help="Number of intervals for fade analysis"
+                )
+                
+                # Create intervals
+                cycle_points = np.linspace(0, len(df)-1, intervals, dtype=int)
+                fade_data = []
+                
+                for i, cycle_idx in enumerate(cycle_points):
+                    cycle_num = df['Cycle'].iloc[cycle_idx]
+                    retention = (df['Discharge_Capacity'].iloc[cycle_idx] / 
+                               df['Discharge_Capacity'].iloc[0] * 100)
+                    fade_rate = (100 - retention) / cycle_num if cycle_num > 0 else 0
+                    
+                    fade_data.append({
+                        'Cycle': cycle_num,
+                        'Retention (%)': retention,
+                        'Fade Rate (%/cycle)': fade_rate
+                    })
+                
+                fade_df = pd.DataFrame(fade_data)
+                
+                # Plot fade analysis
+                fig_fade = go.Figure()
+                
+                # Retention curve
+                fig_fade.add_trace(go.Scatter(
+                    x=fade_df['Cycle'],
+                    y=fade_df['Retention (%)'],
+                    name='Retention',
+                    mode='lines+markers',
+                    line=dict(color='blue')
+                ))
+                
+                # Fade rate curve
+                fig_fade.add_trace(go.Scatter(
+                    x=fade_df['Cycle'],
+                    y=fade_df['Fade Rate (%/cycle)'],
+                    name='Fade Rate',
+                    mode='lines+markers',
+                    yaxis='y2',
+                    line=dict(color='red')
+                ))
+                
+                fig_fade.update_layout(
+                    title='Capacity Fade Analysis',
+                    xaxis_title='Cycle Number',
+                    yaxis_title='Retention (%)',
+                    yaxis2=dict(
+                        title='Fade Rate (%/cycle)',
+                        overlaying='y',
+                        side='right'
+                    ),
+                    height=400,
+                    showlegend=True
+                )
+                
+                st.plotly_chart(fig_fade, use_container_width=True)
+                
+                # Display fade data table
+                st.write("### Detailed Fade Analysis")
+                st.dataframe(fade_df.style.format({
+                    'Retention (%)': '{:.2f}',
+                    'Fade Rate (%/cycle)': '{:.4f}'
+                }))
+            
+            # Capacity distribution analysis
+            with st.expander("📊 Capacity Distribution"):
+                fig_dist = go.Figure()
+                
+                # Add histogram
+                fig_dist.add_trace(go.Histogram(
+                    x=df['Discharge_Capacity'],
+                    name='Frequency',
+                    nbinsx=30,
+                    histnorm='probability'
+                ))
+                
+                # Add kernel density estimation
+                kde_points = np.linspace(
+                    df['Discharge_Capacity'].min(),
+                    df['Discharge_Capacity'].max(),
+                    100
+                )
+                kde = gaussian_kde(df['Discharge_Capacity'])
+                
+                fig_dist.add_trace(go.Scatter(
+                    x=kde_points,
+                    y=kde(kde_points),
+                    name='KDE',
+                    line=dict(color='red')
+                ))
+                
+                fig_dist.update_layout(
+                    title='Capacity Distribution',
+                    xaxis_title='Discharge Capacity (mAh/g)',
+                    yaxis_title='Probability Density',
+                    height=400,
+                    barmode='overlay'
+                )
+                
+                st.plotly_chart(fig_dist, use_container_width=True)
+                
+                # Distribution statistics
+                dist_stats = df['Discharge_Capacity'].describe()
+                st.write("### Distribution Statistics")
+                st.write(pd.DataFrame({
+                    'Statistic': dist_stats.index,
+                    'Value': dist_stats.values
+                }).set_index('Statistic').round(3))
+                
         # Add other tabs...
 
 except Exception as e:
