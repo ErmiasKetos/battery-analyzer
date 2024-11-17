@@ -2,11 +2,10 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scr.data_processing import upload_data, preview_data, basic_analysis, calculate_discharge_capacity
-from scr.advanced_analysis import voltage_profiles, polarization_analysis, dq_de_analysis, kinetics_analysis, degradation_rate
+from scr.data_processing import upload_data, preview_data, data_processing_main
+from scr.advanced_analysis import voltage_profiles, polarization_analysis, kinetics_analysis, degradation_rate
 from scr.visualization import plot_capacity_vs_cycle, plot_voltage_vs_capacity, plot_dq_de_curves
 from scr.li_s_features import polysulfide_shuttle_assessment, lithium_metal_anode_monitoring
-from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 
 st.set_page_config(page_title="Li-S Battery Analyzer", layout="wide")
