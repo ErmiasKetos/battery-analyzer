@@ -2,6 +2,19 @@ import pandas as pd
 import streamlit as st
 import numpy as np
 
+def upload_data(file):
+    if file.name.endswith('.csv'):
+        return pd.read_csv(file)
+    elif file.name.endswith('.xlsx'):
+        return pd.read_excel(file)
+    else:
+        st.error("Unsupported file format. Please upload a CSV or Excel file.")
+        return None
+
+def preview_data(df):
+    st.dataframe(df.head())
+
+
 def basic_analysis(df):
     st.subheader("Basic Analysis")
     
