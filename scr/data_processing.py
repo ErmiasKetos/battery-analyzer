@@ -2,7 +2,6 @@ import pandas as pd
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import io
 
 def upload_data(file):
     if file.name.endswith('.csv'):
@@ -37,10 +36,11 @@ def basic_analysis(df):
     discharge_capacity = df['Discharge Capacity (mAh)'].rolling(window=5).mean()
     capacity_retention = df['Discharge Capacity (mAh)'] / df['Discharge Capacity (mAh)'].iloc[0] * 100
     
-    if 'Charge Capacity (mAh)' in df.columns:
+    if 'Charge Current (A)' in df.columns and 'Charge Time (h)' in df.columns:
+        df['Charge Capacity (mAh)'] = df['Charge Current (A)'] * df['Charge Time (h)'] * 1000
         coulombic_efficiency = df['Discharge Capacity (mAh)'] / df['Charge Capacity (mAh)'] * 100
     else:
-        st.warning("'Charge Capacity (mAh)' column not found. Coulombic Efficiency cannot be calculated.")
+        st.warning("Unable to calculate Charge Capacity and Coulombic Efficiency. Required columns not found.")
         coulombic_efficiency = None
     
     # Display results
