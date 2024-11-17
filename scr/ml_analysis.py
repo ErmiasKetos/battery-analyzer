@@ -6,56 +6,52 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+import io
 
 def clean_and_prepare_data(df):
     st.subheader("Data Cleaning and Preparation")
     
     # Calculate missing metrics
-    if 'Charge Capacity' not in df.columns and 'Charge Current' in df.columns and 'Charge Time' in df.columns:
-        df['Charge Capacity'] = df['Charge Current'] * df['Charge Time']
-        st.write("Calculated Charge Capacity from Charge Current and Charge Time.")
+    if 'Cycle Number' not in df.columns:
+        df['Cycle Number'] = range(1, len(df) + 1)
+        st.write("Added 'Cycle Number' column.")
     
-    if 'Discharge Capacity' not in df.columns and 'Discharge Current' in df.columns and 'Discharge Time' in df.columns:
-        df['Discharge Capacity'] = df['Discharge Current'] * df['Discharge Time']
-        st.write("Calculated Discharge Capacity from Discharge Current and Discharge Time.")
+    if 'Charge Capacity (mAh)' not in df.columns and 'Charge Current (A)' in df.columns and 'Charge Time (h)' in df.columns:
+        df['Charge Capacity (mAh)'] = df['Charge Current (A)'] * df['Charge Time (h)'] * 1000
+        st.write("Calculated 'Charge Capacity (mAh)' from Charge Current and Charge Time.")
     
-    if 'Coulombic Efficiency' not in df.columns and 'Charge Capacity' in df.columns and 'Discharge Capacity' in df.columns:
-        df['Coulombic Efficiency'] = (df['Discharge Capacity'] / df['Charge Capacity']) * 100
-        st.write("Calculated Coulombic Efficiency from Charge Capacity and Discharge Capacity.")
+    if 'Discharge Capacity (mAh)' not in df.columns and 'Discharge Current (A)' in df.columns and 'Discharge Time (h)' in df.columns:
+        df['Discharge Capacity (mAh)'] = df['Discharge Current (A)'] * df['Discharge Time (h)'] * 1000
+        st.write("Calculated 'Discharge Capacity (mAh)' from Discharge Current and Discharge Time.")
     
-    # Generate missing data if needed
-    required_columns = ['Cycle', 'Charge Capacity', 'Discharge Capacity', 'Coulombic Efficiency']
+    if 'Coulombic Efficiency' not in df.columns and 'Charge Capacity (mAh)' in df.columns and 'Discharge Capacity (mAh)' in df.columns:
+        df['Coulombic Efficiency'] = (df['Discharge Capacity (mAh)'] / df['Charge Capacity (mAh)']) * 100
+        st.write("Calculated 'Coulombic Efficiency' from Charge Capacity and Discharge Capacity.")
+    
+    # Check if all required columns are present
+    required_columns = ['Cycle Number', 'Charge Capacity (mAh)', 'Discharge Capacity (mAh)', 'Coulombic Efficiency']
     missing_columns = [col for col in required_columns if col not in df.columns]
     
     if missing_columns:
-        st.warning(f"Missing columns: {', '.join(missing_columns)}. Generating synthetic data for these columns.")
-        df = generate_missing_data(df, missing_columns)
+        st.error(f"Unable to calculate the following columns: {', '.join(missing_columns)}. Please ensure your data includes the necessary information.")
+        return None
     
-    return df
-
-def generate_missing_data(df, missing_columns):
-    for col in missing_columns:
-        if col == 'Cycle':
-            df[col] = range(1, len(df) + 1)
-        elif col in ['Charge Capacity', 'Discharge Capacity']:
-            # Generate synthetic capacity data with some degradation
-            initial_capacity = 1000  # mAh
-            degradation_rate = 0.05  # 5% per 100 cycles
-            noise = np.random.normal(0, 10, len(df))
-            df[col] = initial_capacity * (1 - degradation_rate * df['Cycle'] / 100) + noise
-        elif col == 'Coulombic Efficiency':
-            # Generate synthetic Coulombic Efficiency data
-            df[col] = 98 + np.random.normal(0, 0.5, len(df))
-            df[col] = df[col].clip(0, 100)  # Ensure values are between 0 and 100
+    # Provide downloadable CSV
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label="Download updated data as CSV",
+        data=csv,
+        file_name="updated_battery_data.csv",
+        mime="text/csv"
+    )
     
     return df
 
 def interpret_data(df):
     st.subheader("Data Interpretation")
     
-    # Simulating AI-based interpretation
     avg_coulombic_efficiency = df['Coulombic Efficiency'].mean()
-    capacity_fade = (df['Discharge Capacity'].iloc[0] - df['Discharge Capacity'].iloc[-1]) / df['Discharge Capacity'].iloc[0] * 100
+    capacity_fade = (df['Discharge Capacity (mAh)'].iloc[0] - df['Discharge Capacity (mAh)'].iloc[-1]) / df['Discharge Capacity (mAh)'].iloc[0] * 100
     
     interpretation = f"""
     Based on the analysis of the battery data:
@@ -75,7 +71,7 @@ def interpret_data(df):
        }
     
     3. {
-       'The battery shows consistent performance across cycles.' if df['Discharge Capacity'].std() / df['Discharge Capacity'].mean() < 0.05 else
+       'The battery shows consistent performance across cycles.' if df['Discharge Capacity (mAh)'].std() / df['Discharge Capacity (mAh)'].mean() < 0.05 else
        'There is noticeable variation in discharge capacity across cycles, which may indicate inconsistent performance or measurement issues.'
        }
     
@@ -95,11 +91,14 @@ def predict_capacity(df):
     st.subheader("Capacity Prediction")
     
     df = clean_and_prepare_data(df)
+    if df is None:
+        return
+    
     interpret_data(df)
     
     # Prepare data for ML model
-    X = df[['Cycle', 'Charge Capacity', 'Discharge Capacity', 'Coulombic Efficiency']]
-    y = df['Discharge Capacity'].shift(-1)  # Predict next cycle's capacity
+    X = df[['Cycle Number', 'Charge Capacity (mAh)', 'Discharge Capacity (mAh)', 'Coulombic Efficiency']]
+    y = df['Discharge Capacity (mAh)'].shift(-1)  # Predict next cycle's capacity
     X = X[:-1]  # Remove last row
     y = y[:-1]  # Remove last row
     
@@ -123,7 +122,7 @@ def predict_capacity(df):
     st.write(f"Root Mean Squared Error: {rmse:.4f}")
     
     # Plot actual vs predicted
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 6))
     ax.scatter(y_test, y_pred, alpha=0.5)
     ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
     ax.set_xlabel('Actual Capacity')
@@ -138,46 +137,54 @@ def predict_capacity(df):
     st.write(feature_importance)
     
     # Predict future cycles
-    last_cycle = df['Cycle'].max()
-    future_cycles = pd.DataFrame({'Cycle': range(last_cycle + 1, last_cycle + 51)})
+    last_cycle = df['Cycle Number'].max()
+    future_cycles = pd.DataFrame({'Cycle Number': range(last_cycle + 1, last_cycle + 51)})
     future_X = pd.concat([X.tail(1)] * 50, ignore_index=True)
-    future_X['Cycle'] = future_cycles['Cycle']
+    future_X['Cycle Number'] = future_cycles['Cycle Number']
     future_X_scaled = scaler.transform(future_X)
     future_predictions = model.predict(future_X_scaled)
     
     # Plot future predictions
-    fig, ax = plt.subplots()
-    ax.plot(df['Cycle'], df['Discharge Capacity'], label='Historical Data')
-    ax.plot(future_cycles['Cycle'], future_predictions, label='Predicted', linestyle='--')
-    ax.set_xlabel('Cycle')
-    ax.set_ylabel('Discharge Capacity')
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(df['Cycle Number'], df['Discharge Capacity (mAh)'], label='Historical Data')
+    ax.plot(future_cycles['Cycle Number'], future_predictions, label='Predicted', linestyle='--')
+    ax.set_xlabel('Cycle Number')
+    ax.set_ylabel('Discharge Capacity (mAh)')
     ax.set_title('Discharge Capacity Prediction')
     ax.legend()
     st.pyplot(fig)
+    
+    # Save updated data
+    st.session_state.df = df
 
 def detect_anomalies(df):
     st.subheader("Anomaly Detection")
     
-    df = clean_and_prepare_data(df)
+    if 'df' in st.session_state:
+        df = st.session_state.df
+    else:
+        df = clean_and_prepare_data(df)
+        if df is None:
+            return
     
     # Calculate rolling mean and standard deviation
     window = 10
-    df['rolling_mean'] = df['Discharge Capacity'].rolling(window=window).mean()
-    df['rolling_std'] = df['Discharge Capacity'].rolling(window=window).std()
+    df['rolling_mean'] = df['Discharge Capacity (mAh)'].rolling(window=window).mean()
+    df['rolling_std'] = df['Discharge Capacity (mAh)'].rolling(window=window).std()
     
     # Define anomalies as points outside 3 standard deviations
     df['lower_bound'] = df['rolling_mean'] - 3 * df['rolling_std']
     df['upper_bound'] = df['rolling_mean'] + 3 * df['rolling_std']
-    df['is_anomaly'] = (df['Discharge Capacity'] < df['lower_bound']) | (df['Discharge Capacity'] > df['upper_bound'])
+    df['is_anomaly'] = (df['Discharge Capacity (mAh)'] < df['lower_bound']) | (df['Discharge Capacity (mAh)'] > df['upper_bound'])
     
     # Plot results
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(df['Cycle'], df['Discharge Capacity'], label='Discharge Capacity')
-    ax.plot(df['Cycle'], df['rolling_mean'], label='Rolling Mean', linestyle='--')
-    ax.fill_between(df['Cycle'], df['lower_bound'], df['upper_bound'], alpha=0.2, label='Normal Range')
-    ax.scatter(df[df['is_anomaly']]['Cycle'], df[df['is_anomaly']]['Discharge Capacity'], color='red', label='Anomalies')
-    ax.set_xlabel('Cycle')
-    ax.set_ylabel('Discharge Capacity')
+    ax.plot(df['Cycle Number'], df['Discharge Capacity (mAh)'], label='Discharge Capacity')
+    ax.plot(df['Cycle Number'], df['rolling_mean'], label='Rolling Mean', linestyle='--')
+    ax.fill_between(df['Cycle Number'], df['lower_bound'], df['upper_bound'], alpha=0.2, label='Normal Range')
+    ax.scatter(df[df['is_anomaly']]['Cycle Number'], df[df['is_anomaly']]['Discharge Capacity (mAh)'], color='red', label='Anomalies')
+    ax.set_xlabel('Cycle Number')
+    ax.set_ylabel('Discharge Capacity (mAh)')
     ax.set_title('Anomaly Detection in Discharge Capacity')
     ax.legend()
     st.pyplot(fig)
@@ -187,39 +194,44 @@ def detect_anomalies(df):
 def estimate_rul(df):
     st.subheader("Remaining Useful Life (RUL) Estimation")
     
-    df = clean_and_prepare_data(df)
+    if 'df' in st.session_state:
+        df = st.session_state.df
+    else:
+        df = clean_and_prepare_data(df)
+        if df is None:
+            return
     
     # Define end-of-life capacity (e.g., 80% of initial capacity)
-    initial_capacity = df['Discharge Capacity'].iloc[0]
+    initial_capacity = df['Discharge Capacity (mAh)'].iloc[0]
     eol_capacity = 0.8 * initial_capacity
     
     # Fit a linear regression model to estimate capacity fade
     from sklearn.linear_model import LinearRegression
     model = LinearRegression()
-    model.fit(df[['Cycle']], df['Discharge Capacity'])
+    model.fit(df[['Cycle Number']], df['Discharge Capacity (mAh)'])
     
     # Predict future cycles until EOL
-    future_cycles = pd.DataFrame({'Cycle': range(df['Cycle'].max() + 1, df['Cycle'].max() + 1000)})
+    future_cycles = pd.DataFrame({'Cycle Number': range(df['Cycle Number'].max() + 1, df['Cycle Number'].max() + 1000)})
     future_capacity = model.predict(future_cycles)
     
     # Find cycle where capacity reaches EOL
-    eol_cycle = future_cycles[future_capacity <= eol_capacity]['Cycle'].min()
+    eol_cycle = future_cycles[future_capacity <= eol_capacity]['Cycle Number'].min()
     
     if pd.isna(eol_cycle):
         st.write("Based on the current trend, the battery is not expected to reach end-of-life within the next 1000 cycles.")
     else:
-        rul = eol_cycle - df['Cycle'].max()
+        rul = eol_cycle - df['Cycle Number'].max()
         st.write(f"Estimated Remaining Useful Life: {rul} cycles")
     
     # Plot RUL estimation
     fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(df['Cycle'], df['Discharge Capacity'], label='Historical Data')
-    ax.plot(future_cycles['Cycle'], future_capacity, linestyle='--', label='Projected Capacity')
+    ax.plot(df['Cycle Number'], df['Discharge Capacity (mAh)'], label='Historical Data')
+    ax.plot(future_cycles['Cycle Number'], future_capacity, linestyle='--', label='Projected Capacity')
     ax.axhline(y=eol_capacity, color='r', linestyle=':', label='End-of-Life Capacity')
     if not pd.isna(eol_cycle):
         ax.axvline(x=eol_cycle, color='g', linestyle=':', label='Estimated EOL')
-    ax.set_xlabel('Cycle')
-    ax.set_ylabel('Discharge Capacity')
+    ax.set_xlabel('Cycle Number')
+    ax.set_ylabel('Discharge Capacity (mAh)')
     ax.set_title('Remaining Useful Life Estimation')
     ax.legend()
     st.pyplot(fig)
