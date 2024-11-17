@@ -1,177 +1,229 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from scipy.signal import savgol_filter
+import plotly.subplots as sp
 from scipy.interpolate import interp1d
+from scipy.signal import find_peaks
+import sklearn
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.ensemble import RandomForestRegressor, IsolationForest
+from sklearn.svm import SVR
+from sklearn.neural_network import MLPRegressor
+from sklearn.cluster import KMeans
+from sklearn.model_selection import cross_val_score
 
-# Function to load data
-@st.cache_data
-def load_data(file):
-    return pd.read_csv(file)
+# Set page configuration
+st.set_page_config(
+    page_title="Battery Data Analyzer",
+    page_icon="🔋",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# Function to calculate dQ/dV
-def calculate_dqdv(voltage, capacity):
-    dq = np.diff(capacity)
-    dv = np.diff(voltage)
-    dqdv = dq / dv
-    return dqdv, voltage[1:]
+# Utility functions
+def create_features(df, window_size=5):
+    """Create features for ML models"""
+    features = []
+    targets = []
 
-# Function to perform DRT analysis (simplified)
-def drt_analysis(frequency, impedance):
-    # This is a placeholder for DRT analysis
-    # In a real implementation, you would use a more complex algorithm
-    return np.abs(np.fft.fft(impedance))
+    for i in range(len(df) - window_size):
+        features.append(df.iloc[i:i+window_size][
+            ['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']
+        ].values.flatten())
+        targets.append(df.iloc[i+window_size]['Discharge_Capacity'])
 
-# Function to calculate degradation rate
-def calculate_degradation_rate(capacities):
-    cycles = np.arange(1, len(capacities) + 1)
-    slope, _ = np.polyfit(cycles, capacities, 1)
-    return slope
+    return np.array(features), np.array(targets)
 
-# Main Streamlit app
+def train_ml_model(X_train, X_test, y_train, y_test, model_type="Random Forest"):
+    """Train and evaluate ML model"""
+    if model_type == "Random Forest":
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+    elif model_type == "Support Vector Machine":
+        model = SVR(kernel='rbf')
+    else:
+        model = MLPRegressor(hidden_layer_sizes=(100, 50), max_iter=1000)
+
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    return model, y_pred, {
+        'mse': mean_squared_error(y_test, y_pred),
+        'r2': r2_score(y_test, y_pred)
+    }
+
+# Main application
 def main():
-    st.title("Lithium-Sulfur Battery Analysis Dashboard")
+    st.title("🔋 Advanced Battery Data Analyzer")
+    st.write("Upload your battery cycling data for comprehensive analysis.")
 
-    # File uploader
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+    # File upload
+    uploaded_file = st.file_uploader("Choose your CSV file", type="csv")
+
     if uploaded_file is not None:
-        data = load_data(uploaded_file)
-        st.success("Data loaded successfully!")
+        # Read and process data
+        df = pd.read_csv(uploaded_file)
 
-        # Sidebar for analysis options
-        st.sidebar.title("Analysis Options")
-        analysis_type = st.sidebar.selectbox(
-            "Select Analysis Type",
-            ["Capacity and Cycle Life", "Rate Capability", "Electrochemical Analysis", "Advanced Analysis"]
-        )
+        # Create tabs
+        tabs = st.tabs([
+            "📈 Capacity Analysis",
+            "⚡ Voltage Analysis",
+            "🔄 Differential Capacity",
+            "📊 Statistical Analysis",
+            "🤖 Machine Learning",
+            "📋 Raw Data"
+        ])
 
-        # Main content area
-        if analysis_type == "Capacity and Cycle Life":
-            capacity_cycle_life_analysis(data)
-        elif analysis_type == "Rate Capability":
-            rate_capability_analysis(data)
-        elif analysis_type == "Electrochemical Analysis":
-            electrochemical_analysis(data)
-        elif analysis_type == "Advanced Analysis":
-            advanced_analysis(data)
+        # ML Analysis Tab
+        with tabs[4]:
+            st.subheader("🤖 Machine Learning Analysis")
 
-def capacity_cycle_life_analysis(data):
-    st.header("Capacity and Cycle Life Analysis")
+            ml_analysis_type = st.radio(
+                "Select Analysis Type",
+                ["Capacity Prediction", "Anomaly Detection", "Pattern Recognition", "RUL Estimation"],
+                horizontal=True
+            )
 
-    # Assuming 'Cycle' and 'Discharge_Capacity' columns exist in the data
-    fig = make_subplots(rows=2, cols=2)
+            if ml_analysis_type == "Capacity Prediction":
+                capacity_prediction(df)
+            elif ml_analysis_type == "Anomaly Detection":
+                anomaly_detection(df)
+            elif ml_analysis_type == "Pattern Recognition":
+                pattern_recognition(df)
+            else:  # RUL Estimation
+                rul_estimation(df)
 
-    # Specific Capacity
-    fig.add_trace(go.Scatter(x=data['Cycle'], y=data['Discharge_Capacity'], mode='lines+markers', name='Discharge Capacity'), row=1, col=1)
-    fig.update_xaxes(title_text="Cycle Number", row=1, col=1)
-    fig.update_yaxes(title_text="Specific Capacity (mAh/g)", row=1, col=1)
+def capacity_prediction(df):
+    st.write("### Capacity Prediction Model")
 
-    # Capacity Retention
-    initial_capacity = data['Discharge_Capacity'].iloc[0]
-    capacity_retention = data['Discharge_Capacity'] / initial_capacity * 100
-    fig.add_trace(go.Scatter(x=data['Cycle'], y=capacity_retention, mode='lines+markers', name='Capacity Retention'), row=1, col=2)
-    fig.update_xaxes(title_text="Cycle Number", row=1, col=2)
-    fig.update_yaxes(title_text="Capacity Retention (%)", row=1, col=2)
-
-    # Coulombic Efficiency
-    coulombic_efficiency = data['Discharge_Capacity'] / data['Charge_Capacity'] * 100
-    fig.add_trace(go.Scatter(x=data['Cycle'], y=coulombic_efficiency, mode='lines+markers', name='Coulombic Efficiency'), row=2, col=1)
-    fig.update_xaxes(title_text="Cycle Number", row=2, col=1)
-    fig.update_yaxes(title_text="Coulombic Efficiency (%)", row=2, col=1)
-
-    # Degradation Rate
-    degradation_rate = calculate_degradation_rate(data['Discharge_Capacity'])
-    st.metric("Degradation Rate", f"{degradation_rate:.4f} mAh/g/cycle")
-
-    fig.update_layout(height=800, width=800, title_text="Capacity and Cycle Life Analysis")
-    st.plotly_chart(fig)
-
-def rate_capability_analysis(data):
-    st.header("Rate Capability Analysis")
-
-    # Assuming 'C_rate' and 'Discharge_Capacity' columns exist in the data
-    c_rates = data['C_rate'].unique()
-    
-    fig = go.Figure()
-    for c_rate in c_rates:
-        subset = data[data['C_rate'] == c_rate]
-        fig.add_trace(go.Box(y=subset['Discharge_Capacity'], name=f'{c_rate}C'))
-
-    fig.update_layout(
-        title="Discharge Capacity at Different C-rates",
-        xaxis_title="C-rate",
-        yaxis_title="Discharge Capacity (mAh/g)"
+    # Model selection
+    model_type = st.selectbox(
+        "Select Model Type",
+        ["Random Forest", "Support Vector Machine", "Neural Network"]
     )
-    st.plotly_chart(fig)
 
-def electrochemical_analysis(data):
-    st.header("Electrochemical Analysis")
+    window_size = st.slider("Window Size", 3, 10, 5)
 
-    # Voltage Profiles
-    st.subheader("Voltage Profiles")
-    cycle = st.selectbox("Select Cycle", data['Cycle'].unique())
-    cycle_data = data[data['Cycle'] == cycle]
+    if st.button("Train Model"):
+        with st.spinner("Training model..."):
+            # Prepare data
+            X, y = create_features(df, window_size)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42
+            )
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=cycle_data['Capacity'], y=cycle_data['Voltage'], mode='lines', name='Charge'))
-    fig.add_trace(go.Scatter(x=cycle_data['Capacity'], y=cycle_data['Voltage'], mode='lines', name='Discharge'))
-    fig.update_layout(title=f"Voltage Profile - Cycle {cycle}", xaxis_title="Capacity (mAh/g)", yaxis_title="Voltage (V)")
-    st.plotly_chart(fig)
+            # Scale features
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
 
-    # Polarization
-    st.subheader("Polarization Analysis")
-    polarization = cycle_data['Charge_Voltage'] - cycle_data['Discharge_Voltage']
-    fig = go.Figure(go.Scatter(x=cycle_data['Capacity'], y=polarization, mode='lines'))
-    fig.update_layout(title=f"Polarization - Cycle {cycle}", xaxis_title="Capacity (mAh/g)", yaxis_title="Polarization (V)")
-    st.plotly_chart(fig)
+            # Train and evaluate model
+            model, y_pred, metrics = train_ml_model(
+                X_train_scaled, X_test_scaled, y_train, y_test, model_type
+            )
 
-    # dQ/dV Analysis
-    st.subheader("dQ/dV Analysis")
-    dqdv, voltage = calculate_dqdv(cycle_data['Voltage'], cycle_data['Capacity'])
-    fig = go.Figure(go.Scatter(x=voltage, y=dqdv, mode='lines'))
-    fig.update_layout(title=f"dQ/dV Analysis - Cycle {cycle}", xaxis_title="Voltage (V)", yaxis_title="dQ/dV")
-    st.plotly_chart(fig)
+            # Display results
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Mean Squared Error", f"{metrics['mse']:.4f}")
+            with col2:
+                st.metric("R² Score", f"{metrics['r2']:.4f}")
 
-def advanced_analysis(data):
-    st.header("Advanced Analysis")
+            # Plot predictions
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=range(len(y_test)), y=y_test, name="Actual"))
+            fig.add_trace(go.Scatter(x=range(len(y_pred)), y=y_pred, name="Predicted"))
+            fig.update_layout(title="Model Predictions vs Actual Values")
+            st.plotly_chart(fig, use_container_width=True)
 
-    # Distribution of Relaxation Times (DRT) Analysis
-    st.subheader("Distribution of Relaxation Times (DRT) Analysis")
-    # Assuming 'Frequency' and 'Impedance' columns exist in the data
-    drt = drt_analysis(data['Frequency'], data['Impedance'])
-    fig = go.Figure(go.Scatter(x=data['Frequency'], y=drt, mode='lines'))
-    fig.update_layout(title="DRT Analysis", xaxis_title="Frequency (Hz)", yaxis_title="DRT")
-    st.plotly_chart(fig)
+def anomaly_detection(df):
+    st.write("### Anomaly Detection")
 
-    # Observability Analysis
-    st.subheader("Observability Analysis")
-    st.write("Observability analysis for Li-S batteries is complex due to the shape of the open-circuit voltage curve. "
-             "Advanced state estimation techniques are required for accurate SOC estimation.")
+    contamination = st.slider("Contamination", 0.01, 0.2, 0.1)
 
-    # Reference Performance Test (RPT) Methodology
-    st.subheader("Reference Performance Test (RPT) Methodology")
-    st.write("RPT methodology includes:")
-    st.write("1. Temperature stabilization period")
-    st.write("2. Pre-conditioning cycle")
-    st.write("3. Measurements of capacity, power, resistance, and shuttle current")
-    
-    # Display RPT results if available in the data
-    if 'RPT_Capacity' in data.columns:
-        fig = go.Figure(go.Scatter(x=data['Cycle'], y=data['RPT_Capacity'], mode='lines+markers'))
-        fig.update_layout(title="RPT Capacity vs Cycle", xaxis_title="Cycle Number", yaxis_title="RPT Capacity (mAh/g)")
-        st.plotly_chart(fig)
+    if st.button("Detect Anomalies"):
+        # Prepare data
+        features = df[['Discharge_Capacity', 'Charge_Capacity', 'Coulombic_Efficiency']]
+        scaler = StandardScaler()
+        features_scaled = scaler.fit_transform(features)
 
-    # System Identification and X-ray Tomography
-    st.subheader("System Identification and X-ray Tomography")
-    st.write("This analysis helps investigate the effect of temperature on cycle life performance, "
-             "including capacity fade, power fade, and swelling.")
+        # Detect anomalies
+        iso_forest = IsolationForest(contamination=contamination, random_state=42)
+        anomalies = iso_forest.fit_predict(features_scaled)
 
-    # Life Cycle Assessment (LCA)
-    st.subheader("Life Cycle Assessment (LCA)")
-    st.write("LCA compares the environmental impact of Li-S batteries to other types of batteries. "
-             "This analysis requires additional data on manufacturing processes and materials.")
+        # Plot results
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df[anomalies == 1]['Cycle'],
+            y=df[anomalies == 1]['Discharge_Capacity'],
+            mode='markers',
+            name='Normal'
+        ))
+        fig.add_trace(go.Scatter(
+            x=df[anomalies == -1]['Cycle'],
+            y=df[anomalies == -1]['Discharge_Capacity'],
+            mode='markers',
+            name='Anomaly',
+            marker=dict(color='red')
+        ))
+        st.plotly_chart(fig, use_container_width=True)
+
+def pattern_recognition(df):
+    st.write("### Pattern Recognition")
+
+    n_clusters = st.slider("Number of patterns", 2, 10, 3)
+
+    if st.button("Identify Patterns"):
+        # Prepare data
+        features = df[['Discharge_Capacity', 'Coulombic_Efficiency']]
+        scaler = StandardScaler()
+        features_scaled = scaler.fit_transform(features)
+
+        # Perform clustering
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        clusters = kmeans.fit_predict(features_scaled)
+
+        # Plot results
+        fig = go.Figure()
+        for i in range(n_clusters):
+            mask = clusters == i
+            fig.add_trace(go.Scatter(
+                x=df[mask]['Cycle'],
+                y=df[mask]['Discharge_Capacity'],
+                mode='markers',
+                name=f'Pattern {i+1}'
+            ))
+        st.plotly_chart(fig, use_container_width=True)
+
+def rul_estimation(df):
+    st.write("### Remaining Useful Life Estimation")
+
+    threshold = st.slider("Capacity Threshold (%)", 60, 90, 80)
+
+    if st.button("Estimate RUL"):
+        # Prepare data
+        initial_capacity = df['Discharge_Capacity'].iloc[0]
+        threshold_capacity = initial_capacity * threshold / 100
+
+        # Train model
+        X = df[['Cycle']]
+        y = df['Discharge_Capacity']
+        model = RandomForestRegressor(n_estimators=100)
+        model.fit(X, y)
+
+        # Predict future cycles
+        future_cycles = np.arange(df['Cycle'].max(), df['Cycle'].max() + 100)
+        future_capacity = model.predict(future_cycles.reshape(-1, 1))
+
+        # Plot results
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=df['Cycle'], y=df['Discharge_Capacity'], name='Historical'))
+        fig.add_trace(go.Scatter(x=future_cycles, y=future_capacity, name='Predicted'))
+        fig.add_hline(y=threshold_capacity, line_dash="dash", line_color="red")
+        st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     main()
