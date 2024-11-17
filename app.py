@@ -8,7 +8,7 @@ from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 
 st.set_page_config(page_title="Li-S Battery Analyzer", layout="wide")
 
-st.title("Li-S Battery Charge-Discharge Cycle Analyzer")
+st.title("Advanced Battery Test Data Analyzer")
 
 # Initialize session state
 if 'df' not in st.session_state:
