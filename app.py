@@ -86,7 +86,7 @@ if uploaded_files:
             st.subheader("Lithium Metal Anode Monitoring")
             lithium_metal_anode_monitoring(df)
 
-    elif analysis_type == "ML Analysis":
+elif analysis_type == "ML Analysis":
     st.header("Machine Learning Analysis")
     
     tab1, tab2, tab3 = st.tabs(["Capacity Prediction", "Anomaly Detection", "RUL Estimation"])
