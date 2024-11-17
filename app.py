@@ -65,7 +65,7 @@ if uploaded_file:
                 st.session_state.df = data_processing_main(st.session_state.df)
             
             elif analysis_type == "Advanced Analysis":
-                st.header("Advanced Analysis")
+    advanced_analysis_main(st.session_state.df)
                 
                 tab1, tab2, tab3, tab4 = st.tabs(["Voltage Profiles", "Polarization", "Kinetics", "Degradation Rate"])
                 
