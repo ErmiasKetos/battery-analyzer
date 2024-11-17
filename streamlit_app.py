@@ -361,6 +361,228 @@ try:
                     'Statistic': dist_stats.index,
                     'Value': dist_stats.values
                 }).set_index('Statistic').round(3))
+
+# Voltage Analysis Tab
+            with tabs[1]:
+                st.subheader("⚡ Voltage Analysis")
+                
+                # Basic voltage metrics
+                with st.expander("📊 Voltage Metrics", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric(
+                            "Average Charge Voltage",
+                            f"{df['Charge_Voltage'].mean():.3f} V",
+                            help="Mean charging voltage"
+                        )
+                        st.metric(
+                            "Max Charge Voltage",
+                            f"{df['Charge_Voltage'].max():.3f} V",
+                            help="Maximum charging voltage"
+                        )
+                    
+                    with col2:
+                        st.metric(
+                            "Average Discharge Voltage",
+                            f"{df['Discharge_Voltage'].mean():.3f} V",
+                            help="Mean discharging voltage"
+                        )
+                        st.metric(
+                            "Min Discharge Voltage",
+                            f"{df['Discharge_Voltage'].min():.3f} V",
+                            help="Minimum discharging voltage"
+                        )
+                    
+                    with col3:
+                        avg_gap = df['Charge_Voltage'].mean() - df['Discharge_Voltage'].mean()
+                        st.metric(
+                            "Average Voltage Gap",
+                            f"{avg_gap:.3f} V",
+                            help="Average difference between charge and discharge voltage"
+                        )
+                        st.metric(
+                            "Voltage Stability",
+                            f"{df['Charge_Voltage'].std():.3f} V",
+                            help="Standard deviation of charge voltage"
+                        )
+                
+                # Voltage evolution plot
+                with st.expander("📈 Voltage Evolution", expanded=True):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col2:
+                        show_gap = st.checkbox("Show Voltage Gap", value=True)
+                        show_ma = st.checkbox("Show Moving Average", value=False)
+                        
+                        if show_ma:
+                            ma_window = st.slider(
+                                "Moving Average Window",
+                                min_value=3,
+                                max_value=20,
+                                value=5
+                            )
+                    
+                    with col1:
+                        fig_voltage = go.Figure()
+                        
+                        # Add charge voltage
+                        if show_ma:
+                            ma_charge = df['Charge_Voltage'].rolling(window=ma_window).mean()
+                            fig_voltage.add_trace(go.Scatter(
+                                x=df['Cycle'],
+                                y=ma_charge,
+                                name='Charge V (MA)',
+                                line=dict(color='red', width=2)
+                            ))
+                        
+                        fig_voltage.add_trace(go.Scatter(
+                            x=df['Cycle'],
+                            y=df['Charge_Voltage'],
+                            name='Charge Voltage',
+                            line=dict(color='red', width=1 if show_ma else 2),
+                            opacity=0.5 if show_ma else 1
+                        ))
+                        
+                        # Add discharge voltage
+                        if show_ma:
+                            ma_discharge = df['Discharge_Voltage'].rolling(window=ma_window).mean()
+                            fig_voltage.add_trace(go.Scatter(
+                                x=df['Cycle'],
+                                y=ma_discharge,
+                                name='Discharge V (MA)',
+                                line=dict(color='blue', width=2)
+                            ))
+                        
+                        fig_voltage.add_trace(go.Scatter(
+                            x=df['Cycle'],
+                            y=df['Discharge_Voltage'],
+                            name='Discharge Voltage',
+                            line=dict(color='blue', width=1 if show_ma else 2),
+                            opacity=0.5 if show_ma else 1
+                        ))
+                        
+                        # Add voltage gap
+                        if show_gap:
+                            voltage_gap = df['Charge_Voltage'] - df['Discharge_Voltage']
+                            fig_voltage.add_trace(go.Scatter(
+                                x=df['Cycle'],
+                                y=voltage_gap,
+                                name='Voltage Gap',
+                                line=dict(color='green'),
+                                yaxis='y2'
+                            ))
+                        
+                        # Update layout
+                        fig_voltage.update_layout(
+                            title='Voltage Evolution',
+                            xaxis_title='Cycle Number',
+                            yaxis_title='Voltage (V)',
+                            yaxis2=dict(
+                                title='Voltage Gap (V)',
+                                overlaying='y',
+                                side='right'
+                            ) if show_gap else None,
+                            height=500,
+                            hovermode='x unified'
+                        )
+                        
+                        st.plotly_chart(fig_voltage, use_container_width=True)
+                
+                # Voltage profile comparison
+                with st.expander("🔍 Voltage Profile Analysis"):
+                    # Select cycles to compare
+                    cycles_to_compare = st.multiselect(
+                        "Select cycles to compare",
+                        options=sorted(df['Cycle'].unique()),
+                        default=[df['Cycle'].iloc[0], df['Cycle'].iloc[-1]]
+                    )
+                    
+                    if cycles_to_compare:
+                        fig_profile = go.Figure()
+                        
+                        for cycle in cycles_to_compare:
+                            cycle_data = df[df['Cycle'] == cycle]
+                            
+                            # Add charge profile
+                            fig_profile.add_trace(go.Scatter(
+                                x=cycle_data['Charge_Capacity'],
+                                y=cycle_data['Charge_Voltage'],
+                                name=f'Cycle {cycle} (Charge)',
+                                line=dict(dash='solid')
+                            ))
+                            
+                            # Add discharge profile
+                            fig_profile.add_trace(go.Scatter(
+                                x=cycle_data['Discharge_Capacity'],
+                                y=cycle_data['Discharge_Voltage'],
+                                name=f'Cycle {cycle} (Discharge)',
+                                line=dict(dash='dot')
+                            ))
+                        
+                        fig_profile.update_layout(
+                            title='Voltage vs Capacity Profiles',
+                            xaxis_title='Capacity (mAh/g)',
+                            yaxis_title='Voltage (V)',
+                            height=500,
+                            hovermode='x unified'
+                        )
+                        
+                        st.plotly_chart(fig_profile, use_container_width=True)
+                
+                # Statistical analysis
+                with st.expander("📊 Voltage Statistics"):
+                    # Calculate voltage statistics for each cycle
+                    voltage_stats = df.groupby('Cycle').agg({
+                        'Charge_Voltage': ['mean', 'std', 'min', 'max'],
+                        'Discharge_Voltage': ['mean', 'std', 'min', 'max']
+                    }).round(3)
+                    
+                    # Rename columns for clarity
+                    voltage_stats.columns = [
+                        'Charge V (mean)', 'Charge V (std)', 'Charge V (min)', 'Charge V (max)',
+                        'Discharge V (mean)', 'Discharge V (std)', 'Discharge V (min)', 'Discharge V (max)'
+                    ]
+                    
+                    # Display statistics
+                    st.write("### Cycle-by-Cycle Voltage Statistics")
+                    st.dataframe(voltage_stats)
+                    
+                    # Plot voltage distributions
+                    fig_dist = go.Figure()
+                    
+                    # Add charge voltage distribution
+                    fig_dist.add_trace(go.Box(
+                        y=df['Charge_Voltage'],
+                        name='Charge Voltage',
+                        boxpoints='outliers'
+                    ))
+                    
+                    # Add discharge voltage distribution
+                    fig_dist.add_trace(go.Box(
+                        y=df['Discharge_Voltage'],
+                        name='Discharge Voltage',
+                        boxpoints='outliers'
+                    ))
+                    
+                    fig_dist.update_layout(
+                        title='Voltage Distributions',
+                        yaxis_title='Voltage (V)',
+                        height=400,
+                        showlegend=True
+                    )
+                    
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                    
+                    # Download statistics
+                    csv = voltage_stats.to_csv()
+                    st.download_button(
+                        label="Download Voltage Statistics",
+                        data=csv,
+                        file_name="voltage_statistics.csv",
+                        mime="text/csv"
+                    )
+                    
                 
         # Add other tabs...
 
