@@ -5,7 +5,14 @@ import matplotlib.pyplot as plt
 
 def voltage_profiles(df):
     st.subheader("Voltage Profiles")
-    # Placeholder - replace with actual voltage profile analysis
+    
+    required_columns = ['Capacity', 'Voltage']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    
+    if missing_columns:
+        st.warning(f"Missing columns: {', '.join(missing_columns)}. Cannot plot Voltage Profiles.")
+        return
+    
     fig, ax = plt.subplots()
     ax.plot(df['Capacity'], df['Voltage'])
     ax.set_xlabel('Capacity')
@@ -14,13 +21,27 @@ def voltage_profiles(df):
 
 def polarization_analysis(df):
     st.subheader("Polarization Analysis")
-    # Placeholder - replace with actual polarization analysis
+    
+    required_columns = ['Charge Voltage', 'Discharge Voltage']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    
+    if missing_columns:
+        st.warning(f"Missing columns: {', '.join(missing_columns)}. Cannot perform Polarization Analysis.")
+        return
+    
     polarization = df['Charge Voltage'] - df['Discharge Voltage']
     st.line_chart(polarization)
 
 def dq_de_analysis(df):
     st.subheader("dQ/dE Analysis")
-    # Placeholder - replace with actual dQ/dE analysis
+    
+    required_columns = ['Capacity', 'Voltage']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    
+    if missing_columns:
+        st.warning(f"Missing columns: {', '.join(missing_columns)}. Cannot perform dQ/dE Analysis.")
+        return
+    
     dq_de = np.gradient(df['Capacity'], df['Voltage'])
     fig, ax = plt.subplots()
     ax.plot(df['Voltage'], dq_de)
@@ -30,11 +51,14 @@ def dq_de_analysis(df):
 
 def kinetics_analysis(df):
     st.subheader("Kinetics Analysis")
-    # Placeholder - replace with actual kinetics analysis
     st.write("Kinetics analysis not implemented yet.")
 
 def degradation_rate(df):
     st.subheader("Degradation Rate")
-    # Placeholder - replace with actual degradation rate calculation
+    
+    if 'Discharge Capacity' not in df.columns:
+        st.warning("'Discharge Capacity' column not found. Cannot calculate Degradation Rate.")
+        return
+    
     capacity_fade_rate = (df['Discharge Capacity'].iloc[0] - df['Discharge Capacity'].iloc[-1]) / len(df)
     st.write(f"Capacity fade rate: {capacity_fade_rate:.4f} mAh/cycle")
