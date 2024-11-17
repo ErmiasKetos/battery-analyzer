@@ -79,7 +79,7 @@ try:
     if uploaded_file is not None:
         # Read data
         df = pd.read_csv(uploaded_file)
-        if st.button("🔍 Process Data"):
+       
         # Create tabs
         tabs = st.tabs([
             "📈 Basic Analysis",
