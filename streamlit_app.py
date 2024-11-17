@@ -59,139 +59,104 @@ if uploaded_file is not None:
             # Create renamed dataframe
             df = df_original.rename(columns={v: k for k, v in col_mapping.items()})
             
-            # General Analysis
-            st.subheader("📊 Battery Performance Analysis")
-            
             # Create analysis tabs
             tab1, tab2, tab3 = st.tabs(["📈 Capacity Analysis", "⚡ Voltage Analysis", "🔍 Detailed Metrics"])
             
             with tab1:
-                # Capacity Analysis
-                discharge_capacity = df['Discharge_Capacity'].dropna()
-                charge_capacity = df['Charge_Capacity'].dropna()
+                st.subheader("Capacity Analysis")
                 
-                # Create subplot with shared x-axis
-                fig = make_subplots(rows=2, cols=1, shared_xaxis=True,
-                                  vertical_spacing=0.1,
-                                  subplot_titles=('Capacity vs Cycle', 'Coulombic Efficiency'))
+                # Plot 1: Capacity vs Cycle
+                fig_capacity = px.line(df, x='Cycle', 
+                                     y=['Discharge_Capacity', 'Charge_Capacity'],
+                                     title='Capacity vs Cycle Number',
+                                     labels={'value': 'Capacity (mAh/g)',
+                                            'variable': 'Type'})
+                st.plotly_chart(fig_capacity, use_container_width=True)
                 
-                # Add capacity traces
-                fig.add_trace(
-                    go.Scatter(x=df['Cycle'], y=df['Discharge_Capacity'],
-                              name='Discharge Capacity', line=dict(color='blue')),
-                    row=1, col=1
-                )
-                fig.add_trace(
-                    go.Scatter(x=df['Cycle'], y=df['Charge_Capacity'],
-                              name='Charge Capacity', line=dict(color='red')),
-                    row=1, col=1
-                )
+                # Plot 2: Coulombic Efficiency
+                df['Coulombic_Efficiency'] = (df['Discharge_Capacity'] / df['Charge_Capacity'] * 100)
+                fig_efficiency = px.line(df, x='Cycle', 
+                                       y='Coulombic_Efficiency',
+                                       title='Coulombic Efficiency vs Cycle Number',
+                                       labels={'Coulombic_Efficiency': 'Efficiency (%)'})
+                st.plotly_chart(fig_efficiency, use_container_width=True)
                 
-                # Calculate and add efficiency
-                efficiency = (df['Discharge_Capacity'] / df['Charge_Capacity'] * 100)
-                fig.add_trace(
-                    go.Scatter(x=df['Cycle'], y=efficiency,
-                              name='Coulombic Efficiency', line=dict(color='green')),
-                    row=2, col=1
-                )
+                # Metrics
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Initial Capacity", 
+                             f"{df['Discharge_Capacity'].iloc[0]:.2f} mAh/g")
+                    st.metric("Final Capacity", 
+                             f"{df['Discharge_Capacity'].iloc[-1]:.2f} mAh/g")
+                    st.metric("Capacity Retention", 
+                             f"{(df['Discharge_Capacity'].iloc[-1]/df['Discharge_Capacity'].iloc[0]*100):.1f}%")
                 
-                fig.update_layout(height=800)
-                fig.update_yaxes(title_text='Capacity (mAh/g)', row=1, col=1)
-                fig.update_yaxes(title_text='Efficiency (%)', row=2, col=1)
-                fig.update_xaxes(title_text='Cycle Number', row=2, col=1)
-                
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Capacity metrics
-                metrics_col1, metrics_col2 = st.columns(2)
-                with metrics_col1:
-                    st.metric("Initial Capacity", f"{discharge_capacity.iloc[0]:.2f} mAh/g")
-                    st.metric("Final Capacity", f"{discharge_capacity.iloc[-1]:.2f} mAh/g")
-                    st.metric("Capacity Retention", f"{(discharge_capacity.iloc[-1]/discharge_capacity.iloc[0]*100):.1f}%")
-                
-                with metrics_col2:
-                    st.metric("Average Efficiency", f"{efficiency.mean():.2f}%")
-                    st.metric("Minimum Efficiency", f"{efficiency.min():.2f}%")
-                    st.metric("Maximum Efficiency", f"{efficiency.max():.2f}%")
+                with col2:
+                    st.metric("Average Efficiency", 
+                             f"{df['Coulombic_Efficiency'].mean():.2f}%")
+                    st.metric("Minimum Efficiency", 
+                             f"{df['Coulombic_Efficiency'].min():.2f}%")
+                    st.metric("Maximum Efficiency", 
+                             f"{df['Coulombic_Efficiency'].max():.2f}%")
             
             with tab2:
-                # Voltage Analysis
-                fig_voltage = go.Figure()
+                st.subheader("Voltage Analysis")
                 
-                # Voltage vs Cycle
-                fig_voltage.add_trace(go.Scatter(x=df['Cycle'], y=df['Charge_Voltage'],
-                                               name='Charge Voltage', line=dict(color='red')))
-                fig_voltage.add_trace(go.Scatter(x=df['Cycle'], y=df['Discharge_Voltage'],
-                                               name='Discharge Voltage', line=dict(color='blue')))
-                
-                # Calculate voltage gap
-                voltage_gap = df['Charge_Voltage'] - df['Discharge_Voltage']
-                fig_voltage.add_trace(go.Scatter(x=df['Cycle'], y=voltage_gap,
-                                               name='Voltage Gap', line=dict(color='green')))
-                
-                fig_voltage.update_layout(
-                    title='Voltage Profiles',
-                    xaxis_title='Cycle Number',
-                    yaxis_title='Voltage (V)',
-                    height=600
-                )
-                
+                # Voltage vs Cycle plot
+                fig_voltage = px.line(df, x='Cycle',
+                                    y=['Charge_Voltage', 'Discharge_Voltage'],
+                                    title='Voltage Profiles',
+                                    labels={'value': 'Voltage (V)',
+                                           'variable': 'Type'})
                 st.plotly_chart(fig_voltage, use_container_width=True)
                 
-                # Voltage metrics
-                v_col1, v_col2 = st.columns(2)
-                with v_col1:
-                    st.metric("Average Charge Voltage", f"{df['Charge_Voltage'].mean():.3f} V")
-                    st.metric("Average Discharge Voltage", f"{df['Discharge_Voltage'].mean():.3f} V")
+                # Voltage gap analysis
+                df['Voltage_Gap'] = df['Charge_Voltage'] - df['Discharge_Voltage']
+                fig_gap = px.line(df, x='Cycle',
+                                 y='Voltage_Gap',
+                                 title='Voltage Gap vs Cycle Number',
+                                 labels={'Voltage_Gap': 'Voltage Gap (V)'})
+                st.plotly_chart(fig_gap, use_container_width=True)
                 
-                with v_col2:
-                    st.metric("Average Voltage Gap", f"{voltage_gap.mean():.3f} V")
-                    st.metric("Maximum Voltage Gap", f"{voltage_gap.max():.3f} V")
+                # Voltage metrics
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Average Charge Voltage", 
+                             f"{df['Charge_Voltage'].mean():.3f} V")
+                    st.metric("Average Discharge Voltage", 
+                             f"{df['Discharge_Voltage'].mean():.3f} V")
+                
+                with col2:
+                    st.metric("Average Voltage Gap", 
+                             f"{df['Voltage_Gap'].mean():.3f} V")
+                    st.metric("Maximum Voltage Gap", 
+                             f"{df['Voltage_Gap'].max():.3f} V")
             
             with tab3:
-                # Detailed Analysis
-                st.subheader("Detailed Performance Metrics")
+                st.subheader("Detailed Analysis")
                 
                 # Calculate additional metrics
                 cycles = len(df)
-                capacity_fade_rate = ((discharge_capacity.iloc[0] - discharge_capacity.iloc[-1]) / 
-                                    (cycles * discharge_capacity.iloc[0]) * 100)
+                capacity_fade_rate = ((df['Discharge_Capacity'].iloc[0] - df['Discharge_Capacity'].iloc[-1]) / 
+                                    (cycles * df['Discharge_Capacity'].iloc[0]) * 100)
                 
-                # Display metrics in expandable sections
-                with st.expander("Capacity Metrics"):
+                # Display detailed metrics
+                with st.expander("Capacity Analysis"):
                     st.write(f"""
                     - Total Cycles: {cycles}
-                    - Initial Discharge Capacity: {discharge_capacity.iloc[0]:.2f} mAh/g
-                    - Final Discharge Capacity: {discharge_capacity.iloc[-1]:.2f} mAh/g
-                    - Capacity Retention: {(discharge_capacity.iloc[-1]/discharge_capacity.iloc[0]*100):.1f}%
+                    - Initial Discharge Capacity: {df['Discharge_Capacity'].iloc[0]:.2f} mAh/g
+                    - Final Discharge Capacity: {df['Discharge_Capacity'].iloc[-1]:.2f} mAh/g
+                    - Capacity Retention: {(df['Discharge_Capacity'].iloc[-1]/df['Discharge_Capacity'].iloc[0]*100):.1f}%
                     - Capacity Fade Rate: {capacity_fade_rate:.4f}% per cycle
                     """)
                 
-                with st.expander("Efficiency Metrics"):
-                    st.write(f"""
-                    - Average Coulombic Efficiency: {efficiency.mean():.2f}%
-                    - Minimum Efficiency: {efficiency.min():.2f}%
-                    - Maximum Efficiency: {efficiency.max():.2f}%
-                    - Efficiency Standard Deviation: {efficiency.std():.2f}%
-                    """)
-                
-                with st.expander("Voltage Metrics"):
-                    st.write(f"""
-                    - Average Charge Voltage: {df['Charge_Voltage'].mean():.3f} V
-                    - Average Discharge Voltage: {df['Discharge_Voltage'].mean():.3f} V
-                    - Average Voltage Gap: {voltage_gap.mean():.3f} V
-                    - Maximum Voltage Gap: {voltage_gap.max():.3f} V
-                    """)
-                
-                # Add statistical analysis
-                with st.expander("Statistical Analysis"):
+                with st.expander("Statistical Summary"):
                     st.write("Discharge Capacity Statistics:")
-                    st.write(discharge_capacity.describe())
-                    
+                    st.write(df['Discharge_Capacity'].describe())
                     st.write("\nCoulombic Efficiency Statistics:")
-                    st.write(efficiency.describe())
+                    st.write(df['Coulombic_Efficiency'].describe())
             
-            # Download processed data
+            # Download button for processed data
             st.download_button(
                 label="📥 Download Analyzed Data as CSV",
                 data=df.to_csv(index=False).encode('utf-8'),
@@ -203,7 +168,7 @@ if uploaded_file is not None:
         st.error(f"Error analyzing file: {str(e)}")
         st.write("Please check your column mappings and data format.")
 
-# Add instructions at the bottom
+# Instructions
 with st.expander("📖 How to Use"):
     st.write("""
     1. Upload your CSV file using the file uploader
