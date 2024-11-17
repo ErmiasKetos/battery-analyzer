@@ -8,6 +8,7 @@ from scr.visualization import plot_capacity_vs_cycle, plot_voltage_vs_capacity, 
 from scr.li_s_features import polysulfide_shuttle_assessment, lithium_metal_anode_monitoring
 from scr.ml_analysis import predict_capacity, detect_anomalies, estimate_rul
 
+
 st.set_page_config(page_title="Advanced Battery Data Analyzer", layout="wide")
 
 st.title("Advanced Battery Data Analyzer")
